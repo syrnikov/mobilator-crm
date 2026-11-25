@@ -42,8 +42,18 @@ export const chat = (messages: ChatMessage[], event: { id: string; name: string 
     event_name: event?.name ?? null,
   })
 
-export const researchCompany = (companyId: string) =>
-  post<{ found: boolean; summary: string | null; updated: string[] }>({ action: 'research', company_id: companyId })
+export interface ResearchResult {
+  found: boolean
+  summary: string | null
+  registry: { source: string; id: string; years: number } | null
+  other_phones: string[]
+  other_emails: string[]
+  notes: string | null
+  sources: string[]
+  updated: string[]
+}
+
+export const researchCompany = (companyId: string) => post<ResearchResult>({ action: 'research', company_id: companyId })
 
 export const draftEmail = (companyId: string, intent?: string) =>
   post<{ subject: string; body: string }>({ action: 'draft_email', company_id: companyId, intent })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CalendarSheet } from '../components/CalendarSheet'
+import { FinancialsCard, RegistryCard, SocialLinks } from '../components/CompanyFacts'
 import { Icon } from '../components/Icon'
 import { TopBar } from '../components/Layout'
 import { CompanyLogo, Empty, errText, fmtDateTime, fmtDue, fromLocalInput, Sheet, useToast, Working } from '../components/ui'
@@ -47,14 +48,24 @@ export function Firma() {
   const mapQuery = [c.address, c.city, c.name].filter(Boolean).join(', ')
 
   async function research() {
-    setBusy('Caut informații pe web…')
+    const steps = ['Caut firma pe web…', 'Verific registrul oficial…', 'Citesc site-ul firmei…', 'Scriu rezumatul…']
+    let i = 0
+    setBusy(steps[0])
+    const timer = setInterval(() => setBusy(steps[Math.min(++i, steps.length - 1)]), 9000)
     try {
       const r = await researchCompany(c!.id)
       invalidate(c!.id)
-      toast(r.found ? `Fișă completată (${r.updated.length} câmpuri)` : 'Nu am găsit informații sigure despre firmă')
+      toast(
+        !r.found
+          ? 'Nu am găsit informații sigure despre firmă. Adaugă CUI/IDNO din Editează și încearcă din nou.'
+          : r.registry
+            ? `Fișă completată din ${r.registry.source}${r.registry.years ? ` · ${r.registry.years} ani de date financiare` : ''}`
+            : 'Fișă completată de pe web (fără registru oficial)',
+      )
     } catch (e) {
       toast(errText(e), true)
     } finally {
+      clearInterval(timer)
       setBusy('')
     }
   }
@@ -141,6 +152,7 @@ export function Firma() {
           </button>
         </div>
 
+        <SocialLinks c={c} />
         {busy && <Working label={busy} />}
 
         {/* AI */}
@@ -151,7 +163,8 @@ export function Firma() {
           </button>
         </div>
         <div className="card">
-          {c.ai_summary ? <div className="summary">{c.ai_summary}</div> : <div className="mute">Încă nu există un rezumat. AI-ul poate căuta firma pe web și completa fișa.</div>}
+          {c.ai_summary ? <div className="summary">{c.ai_summary}</div> : <div className="mute">Încă nu există un rezumat. AI-ul caută firma pe web, în registrul oficial (ANAF / datero.md) și pe site-ul ei.</div>}
+          {c.enriched_at && <div className="label" style={{ marginTop: 6 }}>actualizat {fmtDateTime(c.enriched_at)}</div>}
           <dl className="kv" style={{ marginTop: 12 }}>
             {c.phone && (<><dt>Telefon</dt><dd><a href={telUrl(c.phone)}>{c.phone}</a></dd></>)}
             {c.email && (<><dt>Email</dt><dd><a href={`mailto:${c.email}`}>{c.email}</a></dd></>)}
@@ -171,6 +184,8 @@ export function Firma() {
           </dl>
         </div>
 
+        <RegistryCard c={c} />
+        <FinancialsCard c={c} />
         <People company={c} onEdit={setPerson} />
         <Tasks company={c} onCalendar={setCalendar} />
         <Notes company={c} />
@@ -479,6 +494,10 @@ function EditCompany({ company, onClose }: { company: Company; onClose: () => vo
           <div className="field"><label className="label">Email</label><input className="input" type="email" {...txt('email')} /></div>
         </div>
         <div className="field"><label className="label">Website</label><input className="input" {...txt('website')} /></div>
+        <div className="field">
+          <label className="label">CUI (România) / IDNO (Moldova)</label>
+          <input className="input mono" inputMode="numeric" placeholder="ex: 14399840 sau 1007600041186" {...txt('registry_id')} />
+        </div>
         <div className="field"><label className="label">Logo (URL imagine)</label><input className="input" {...txt('logo_url')} /></div>
         <div className="field">
           <label className="label">Produse (virgulă)</label>
@@ -496,7 +515,7 @@ function EditCompany({ company, onClose }: { company: Company; onClose: () => vo
             upd.mutate(
               {
                 name: c.name, category: c.category, city: c.city, address: c.address, phone: c.phone, email: c.email,
-                website: c.website, logo_url: c.logo_url, products: c.products, tags: c.tags, ai_summary: c.ai_summary,
+                website: c.website, logo_url: c.logo_url, registry_id: c.registry_id?.replace(/\D/g, '') || null, products: c.products, tags: c.tags, ai_summary: c.ai_summary,
               },
               { onSuccess: onClose, onError: (e) => toast(errText(e), true) },
             )

@@ -61,6 +61,31 @@ export interface Company {
   event_id: string | null
   created_at: string
   updated_at: string
+  // date de registru (ANAF / datero.md)
+  registry_id: string | null
+  legal_name: string | null
+  legal_form: string | null
+  registry_status: string | null
+  activity_code: string | null
+  activity_name: string | null
+  founded_on: string | null
+  employees: number | null
+  vat_payer: boolean | null
+  administrators: string[]
+  financials: FinancialYear[]
+  socials: Partial<Record<'facebook' | 'instagram' | 'linkedin' | 'youtube' | 'tiktok', string>>
+  registry_source: string | null
+  registry_url: string | null
+  enriched_at: string | null
+}
+
+export interface FinancialYear {
+  year: number
+  revenue: number | null
+  net_profit: number | null
+  total_assets: number | null
+  employees: number | null
+  currency: 'RON' | 'MDL'
 }
 
 export interface CompanyListItem extends Company {
