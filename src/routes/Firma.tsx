@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CalendarSheet } from '../components/CalendarSheet'
 import { CompanyProfile, SocialLinks } from '../components/CompanyFacts'
 import { Icon } from '../components/Icon'
 import { TopBar } from '../components/Layout'
-import { CompanyLogo, Empty, errText, fmtDateTime, fmtDue, fromLocalInput, Sheet, useToast, Working } from '../components/ui'
+import { CompanyLogo, Empty, errText, fmtDate, fmtDateTime, fmtDue, fromLocalInput, Sheet, useToast, Working } from '../components/ui'
 import { draftEmail, researchCompany, transcribeAudio } from '../lib/ai'
-import { deleteCompany, uploadLogo, useCompany, useInvalidate, useRowMutations, useUpdateCompany } from '../lib/api'
+import { cardImageUrls, deleteCompany, uploadLogo, useCompany, useEvents, useInvalidate, useRowMutations, useUpdateCompany } from '../lib/api'
 import { fmtSeconds, imageToPng, useRecorder } from '../lib/media'
-import { mailtoUrl, mapsUrl, saveContact, telegramUrl, telUrl, webUrl, whatsappUrl, type CalEvent } from '../lib/shortcuts'
+import { mailtoUrl, mapsUrl, saveContact, saveImage, telUrl, webUrl, type CalEvent } from '../lib/shortcuts'
+import { MessageSheet, type MessageTarget } from '../components/MessageSheet'
+import { useCurrentEvent } from '../lib/currentEvent'
 import { STATUS_LABEL, STATUSES, type Company, type CompanyFull, type Person } from '../lib/types'
 
 const SOURCE_LABEL = { text: 'scris', voce: 'dictat', ai: 'AI', scanare: 'carte de vizită' } as const
@@ -20,6 +22,7 @@ export function Firma() {
   const [editing, setEditing] = useState(false)
   const [person, setPerson] = useState<Partial<Person> | null>(null)
   const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState<MessageTarget | null>(null)
   const toast = useToast()
   const nav = useNavigate()
   const invalidate = useInvalidate()
@@ -46,6 +49,8 @@ export function Firma() {
   const phone = c.phone ?? c.people.find((p) => p.phone)?.phone ?? null
   const email = c.email ?? c.people.find((p) => p.email)?.email ?? null
   const mapQuery = [c.address, c.city, c.name].filter(Boolean).join(', ')
+  const mainPerson = c.people.find((p) => p.phone === phone) ?? c.people[0]
+  const eventName = c.encounters[0]?.events?.name ?? c.events?.name ?? null
 
   async function research() {
     const steps = ['Caut firma pe web…', 'Verific registrul oficial…', 'Citesc site-ul firmei…', 'Scriu rezumatul…']
@@ -127,20 +132,21 @@ export function Firma() {
             </div>
           </div>
         </div>
-        {c.events && <div className="label" style={{ marginBottom: 8 }}>● Cunoscut la {c.events.name}</div>}
-        <div className="rigla" style={{ margin: '0 -16px 14px' }} />
+        <SocialLinks c={c} />
+        <Encounters company={c} />
+        <div className="rigla" style={{ margin: '12px -18px 14px' }} />
 
         {/* Rândul 1: contact direct */}
         <div className="quick">
           <a href={phone ? telUrl(phone) : undefined} className={phone ? '' : 'disabled'}>
             <Icon name="phone" /> Sună
           </a>
-          <a href={phone ? whatsappUrl(phone) : undefined} target="_blank" rel="noreferrer" className={phone ? '' : 'disabled'}>
+          <button className={phone ? '' : 'disabled'} onClick={() => phone && setMsg({ app: 'whatsapp', phone, name: mainPerson?.full_name, eventName })}>
             <Icon name="whatsapp" /> WhatsApp
-          </a>
-          <a href={phone ? telegramUrl(phone) : undefined} target="_blank" rel="noreferrer" className={phone ? '' : 'disabled'}>
+          </button>
+          <button className={phone ? '' : 'disabled'} onClick={() => phone && setMsg({ app: 'telegram', phone, name: mainPerson?.full_name, eventName })}>
             <Icon name="telegram" /> Telegram
-          </a>
+          </button>
           <a href={mapsUrl(mapQuery)} target="_blank" rel="noreferrer">
             <Icon name="map" /> Hartă
           </a>
@@ -161,7 +167,6 @@ export function Firma() {
           </a>
         </div>
 
-        <SocialLinks c={c} />
         {busy && <Working label={busy} />}
 
         {/* AI */}
@@ -193,7 +198,8 @@ export function Firma() {
           </dl>
         </div>
 
-        <People company={c} onEdit={setPerson} />
+        <People company={c} onEdit={setPerson} onMessage={(app, p) => setMsg({ app, phone: p.phone!, name: p.full_name, eventName })} />
+        <CardImages company={c} />
         <Tasks company={c} onCalendar={setCalendar} />
         <Notes company={c} />
         <CompanyProfile c={c} onResearch={research} busy={!!busy} />
@@ -218,6 +224,7 @@ export function Firma() {
       </main>
 
       {calendar && <CalendarSheet initial={calendar} onClose={() => setCalendar(null)} />}
+      {msg && <MessageSheet target={msg} onClose={() => setMsg(null)} />}
       {editing && <EditCompany company={c} onClose={() => setEditing(false)} />}
       {person && <EditPerson company={c} person={person} onClose={() => setPerson(null)} />}
     </>
@@ -263,7 +270,15 @@ function Stars({ company }: { company: Company }) {
 }
 
 // ───────────── Persoane ─────────────
-function People({ company, onEdit }: { company: CompanyFull; onEdit: (p: Partial<Person>) => void }) {
+function People({
+  company,
+  onEdit,
+  onMessage,
+}: {
+  company: CompanyFull
+  onEdit: (p: Partial<Person>) => void
+  onMessage: (app: 'whatsapp' | 'telegram', p: Person) => void
+}) {
   return (
     <>
       <div className="section-title">
@@ -287,9 +302,14 @@ function People({ company, onEdit }: { company: CompanyFull; onEdit: (p: Partial
               </a>
             )}
             {p.phone && (
-              <a className="icon-btn" href={whatsappUrl(p.phone)} target="_blank" rel="noreferrer" aria-label="WhatsApp">
+              <button className="icon-btn" onClick={() => onMessage('whatsapp', p)} aria-label="WhatsApp">
                 <Icon name="whatsapp" size={19} />
-              </a>
+              </button>
+            )}
+            {p.phone && (
+              <button className="icon-btn" onClick={() => onMessage('telegram', p)} aria-label="Telegram">
+                <Icon name="telegram" size={19} />
+              </button>
             )}
             {p.email && (
               <a className="icon-btn" href={`mailto:${p.email}`} aria-label="Email">
@@ -401,8 +421,134 @@ function Tasks({ company, onCalendar }: { company: CompanyFull; onCalendar: (e: 
 }
 
 // ───────────── Notițe ─────────────
+// ───────────── Întâlniri: unde am văzut firma ─────────────
+function Encounters({ company }: { company: CompanyFull }) {
+  const { addEncounter, deleteEncounter } = useRowMutations(company.id)
+  const [adding, setAdding] = useState(false)
+  const [eventId, setEventId] = useState('')
+  const [place, setPlace] = useState('')
+  const { data: events } = useEvents()
+  const cur = useCurrentEvent()
+  const toast = useToast()
+  return (
+    <>
+      <div className="row wrap" style={{ marginTop: 10, gap: 6 }}>
+        {company.encounters.map((e) => (
+          <span key={e.id} className="chip or" title={e.met_on}>
+            <Icon name="pin" size={12} />
+            {[e.events?.name, e.place].filter(Boolean).join(' · ')} · {fmtDate(e.met_on)}
+            <button
+              aria-label="Șterge întâlnirea"
+              style={{ background: 'none', border: 0, padding: 0, marginLeft: 2, cursor: 'pointer', color: 'inherit' }}
+              onClick={() => confirm('Ștergi această întâlnire?') && deleteEncounter.mutate(e.id)}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <button
+          className="chip"
+          style={{ cursor: 'pointer' }}
+          onClick={() => {
+            setEventId(cur?.id ?? '')
+            setAdding(true)
+          }}
+        >
+          <Icon name="plus" size={12} /> {company.encounters.length ? 'Ne-am revăzut' : 'Unde v-ați cunoscut'}
+        </button>
+      </div>
+      {adding && (
+        <Sheet title="Unde ați întâlnit firma?" onClose={() => setAdding(false)}>
+          <div className="stack">
+            <div className="field">
+              <label className="label">Eveniment</label>
+              <select className="select" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+                <option value="">— fără eveniment —</option>
+                {(events ?? []).map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Locație / detalii</label>
+              <input className="input" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="ex: stand B12 · showroom Chișinău · cină" />
+            </div>
+            <button
+              className="btn block"
+              disabled={!eventId && !place.trim()}
+              onClick={() =>
+                addEncounter.mutate(
+                  { eventId: eventId || null, place },
+                  {
+                    onSuccess: () => {
+                      setAdding(false)
+                      setPlace('')
+                    },
+                    onError: (e) => toast(errText(e), true),
+                  },
+                )
+              }
+            >
+              <Icon name="pin" /> Salvează întâlnirea
+            </button>
+          </div>
+        </Sheet>
+      )}
+    </>
+  )
+}
+
+// ───────────── Cărți de vizită ─────────────
+function CardImages({ company }: { company: CompanyFull }) {
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const [open, setOpen] = useState<string | null>(null)
+  const toast = useToast()
+  const key = company.card_images.join('|')
+  useEffect(() => {
+    cardImageUrls(company.card_images).then(setUrls).catch(() => setUrls({}))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  if (!company.card_images.length) return null
+  return (
+    <>
+      <div className="section-title">
+        <h2>Carte de vizită</h2>
+        <span className="label">{company.card_images.length}</span>
+      </div>
+      <div className="photo-preview">
+        {company.card_images.map((p) =>
+          urls[p] ? (
+            <button key={p} style={{ padding: 0, border: 0, background: 'none', cursor: 'pointer' }} onClick={() => setOpen(p)}>
+              <img src={urls[p]} alt="Carte de vizită" />
+            </button>
+          ) : (
+            <div key={p} className="skeleton" style={{ width: 180, height: 110 }} />
+          ),
+        )}
+      </div>
+      {open && urls[open] && (
+        <Sheet title="Carte de vizită" onClose={() => setOpen(null)}>
+          <img src={urls[open]} alt="Carte de vizită" style={{ width: '100%', border: '1.5px solid var(--ink)', borderRadius: 2 }} />
+          <button
+            className="btn block"
+            style={{ marginTop: 12 }}
+            onClick={() => saveImage(urls[open], `carte-${company.name.replace(/\W+/g, '-').toLowerCase()}.jpg`).catch((e) => toast(errText(e), true))}
+          >
+            <Icon name="download" /> Salvează în Poze
+          </button>
+          <p className="mute" style={{ fontSize: 14, margin: '8px 0 0' }}>
+            Pe iPhone alege „Salvează imaginea” din foaia care apare.
+          </p>
+        </Sheet>
+      )}
+    </>
+  )
+}
+
 function Notes({ company }: { company: CompanyFull }) {
-  const { addNote, deleteNote } = useRowMutations(company.id)
+  const { addNote, deleteNote, toggleNote } = useRowMutations(company.id)
   const [text, setText] = useState('')
   const [transcribing, setTranscribing] = useState(false)
   const rec = useRecorder()
@@ -460,16 +606,30 @@ function Notes({ company }: { company: CompanyFull }) {
         {company.notes.length === 0 && !transcribing && <div style={{ marginTop: 10 }}><Empty hand="pagină goală">Nicio notiță încă.</Empty></div>}
         <div style={{ marginTop: 6 }}>
           {company.notes.map((n) => (
-            <div key={n.id} className="note">
+            <div key={n.id} className={`note ${n.collapsed ? 'collapsed' : ''}`}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span className="label">
-                  {fmtDateTime(n.created_at)} · {SOURCE_LABEL[n.source]}
-                </span>
-                <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label="Șterge notița" onClick={() => confirm('Ștergi notița?') && deleteNote.mutate(n.id)}>
-                  <Icon name="close" size={15} />
+                <button
+                  className="row grow"
+                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', textAlign: 'left', gap: 6 }}
+                  onClick={() => toggleNote.mutate({ id: n.id, collapsed: !n.collapsed })}
+                  aria-expanded={!n.collapsed}
+                >
+                  <span className="note-chev">
+                    <Icon name="chevron" size={16} />
+                  </span>
+                  <span className="label">
+                    {fmtDateTime(n.created_at)} · {SOURCE_LABEL[n.source]}
+                  </span>
+                </button>
+                <button className="icon-btn" style={{ width: 30, height: 30, opacity: 0.5 }} aria-label="Șterge notița" onClick={() => confirm('Ștergi definitiv notița? (O poți doar plia, apăsând pe titlu.)') && deleteNote.mutate(n.id)}>
+                  <Icon name="trash" size={15} />
                 </button>
               </div>
-              <div style={{ marginTop: 4 }}>{n.body}</div>
+              {n.collapsed ? (
+                <div className="note-preview">{n.body.split('\n')[0]}</div>
+              ) : (
+                <div style={{ marginTop: 4 }}>{n.body}</div>
+              )}
             </div>
           ))}
         </div>

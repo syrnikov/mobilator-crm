@@ -25,7 +25,7 @@ const nullable = (t: string) => ({ type: [t, 'null'] })
 const extractSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['company', 'people', 'note', 'tasks', 'tags', 'status'],
+  required: ['company', 'people', 'note', 'tasks', 'tags', 'status', 'socials', 'registry_id', 'logo_box'],
   properties: {
     company: {
       type: 'object',
@@ -72,6 +72,32 @@ const extractSchema = {
     },
     tags: { type: 'array', items: { type: 'string' }, description: '2-5 etichete scurte, lowercase' },
     status: { type: 'string', enum: ['nou', 'de_contactat', 'in_discutii', 'colaborator'] },
+    socials: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['facebook', 'instagram', 'tiktok'],
+      properties: {
+        facebook: { ...nullable('string'), description: 'URL complet sau @handle, doar dacă apare' },
+        instagram: { ...nullable('string'), description: 'URL complet sau @handle, doar dacă apare' },
+        tiktok: { ...nullable('string'), description: 'URL complet sau @handle, doar dacă apare' },
+      },
+    },
+    registry_id: { ...nullable('string'), description: 'CUI (România) sau IDNO (Moldova, 13 cifre) dacă apare pe carte' },
+    logo_box: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      required: ['image', 'x', 'y', 'w', 'h'],
+      description:
+        'Doar pentru poze cu cărți de vizită: dreptunghiul care încadrează STRÂNS logo-ul firmei (simbol + nume stilizat), ' +
+        'în coordonate relative 0–1 față de imaginea originală. null dacă nu există logo sau nu e poză.',
+      properties: {
+        image: { type: 'integer', description: 'indexul imaginii (0 = prima)' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        w: { type: 'number' },
+        h: { type: 'number' },
+      },
+    },
   },
 }
 

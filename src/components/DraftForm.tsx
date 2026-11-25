@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { findSimilarCompanies } from '../lib/api'
+import { useEffect, useRef, useState } from 'react'
+import { matchCompanies, type CompanyMatch } from '../lib/api'
 import { STATUS_LABEL, STATUSES, type Draft } from '../lib/types'
 import { Icon } from './Icon'
 import { fromLocalInput, toLocalInput } from './ui'
@@ -16,38 +16,57 @@ const list = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
 
 /** Previzualizare editabilă a fișei extrase de AI (sau completare manuală). */
 export function DraftForm({ draft, onChange, intoCompany, onIntoCompany }: Props) {
-  const [similar, setSimilar] = useState<{ id: string; name: string; city: string | null }[]>([])
+  const [matches, setMatches] = useState<CompanyMatch[]>([])
+  const autoPicked = useRef(false)
   const c = draft.company
   const setC = (patch: Partial<Draft['company']>) => onChange({ ...draft, company: { ...c, ...patch } })
+  const socials = draft.socials ?? { facebook: null, instagram: null, tiktok: null }
+  const setS = (patch: Partial<typeof socials>) => onChange({ ...draft, socials: { ...socials, ...patch } })
 
+  // caută firma în CRM după cod fiscal / telefon / email / nume
+  const key = JSON.stringify([c.name, c.phone, c.email, draft.registry_id, draft.people.map((p) => [p.phone, p.email])])
   useEffect(() => {
-    const t = setTimeout(() => findSimilarCompanies(c.name).then(setSimilar).catch(() => setSimilar([])), 400)
+    const t = setTimeout(
+      () =>
+        matchCompanies(draft)
+          .then((m) => {
+            setMatches(m)
+            // potrivire sigură (telefon / email / cod fiscal) → propunem direct firma existentă
+            if (!autoPicked.current && m[0] && m[0].score >= 90) {
+              autoPicked.current = true
+              onIntoCompany({ id: m[0].id, name: m[0].name })
+            }
+          })
+          .catch(() => setMatches([])),
+      400,
+    )
     return () => clearTimeout(t)
-  }, [c.name])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
 
   return (
     <div className="stack">
-      {similar.length > 0 && (
+      {matches.length > 0 && (
         <div className="banner">
           <div className="label" style={{ color: 'var(--or-dk)', marginBottom: 6 }}>
-            Există deja în CRM
+            {matches[0].score >= 90 ? 'Firma există deja în CRM' : 'Poate există deja în CRM'}
           </div>
           <div className="row wrap">
-            {similar.map((s) => (
+            {matches.map((m) => (
               <button
-                key={s.id}
-                className={`chip ${intoCompany?.id === s.id ? 'ink' : 'or'}`}
-                onClick={() => onIntoCompany(intoCompany?.id === s.id ? null : s)}
+                key={m.id}
+                className={`chip ${intoCompany?.id === m.id ? 'ink' : 'or'}`}
+                onClick={() => onIntoCompany(intoCompany?.id === m.id ? null : { id: m.id, name: m.name })}
               >
-                {intoCompany?.id === s.id && <Icon name="check" size={13} />}
-                {s.name}
-                {s.city ? ` · ${s.city}` : ''}
+                {intoCompany?.id === m.id && <Icon name="check" size={13} />}
+                {m.name}
+                {m.city ? ` · ${m.city}` : ''} <span style={{ opacity: 0.7 }}>({m.reason})</span>
               </button>
             ))}
           </div>
-          <div style={{ fontSize: 13, marginTop: 6 }}>
+          <div style={{ fontSize: 14, marginTop: 6 }}>
             {intoCompany
-              ? `Persoanele, notița și sarcinile se adaugă la „${intoCompany.name}”.`
+              ? `Se adaugă la „${intoCompany.name}”: persoane noi, notiță, sarcini și întâlnirea de azi. Atinge din nou ca să creezi o firmă nouă.`
               : 'Atinge o firmă ca să adaugi informațiile la ea, în loc să creezi una nouă.'}
           </div>
         </div>
@@ -82,6 +101,26 @@ export function DraftForm({ draft, onChange, intoCompany, onIntoCompany }: Props
           <div className="field">
             <label className="label">Website</label>
             <input className="input" inputMode="url" value={c.website ?? ''} onChange={(e) => setC({ website: e.target.value })} placeholder="firma.ro" />
+          </div>
+          <div className="grid2">
+            <div className="field">
+              <label className="label">Instagram</label>
+              <input className="input" value={socials.instagram ?? ''} onChange={(e) => setS({ instagram: e.target.value || null })} placeholder="@brand" />
+            </div>
+            <div className="field">
+              <label className="label">Facebook</label>
+              <input className="input" value={socials.facebook ?? ''} onChange={(e) => setS({ facebook: e.target.value || null })} placeholder="pagina" />
+            </div>
+          </div>
+          <div className="grid2">
+            <div className="field">
+              <label className="label">TikTok</label>
+              <input className="input" value={socials.tiktok ?? ''} onChange={(e) => setS({ tiktok: e.target.value || null })} placeholder="@brand" />
+            </div>
+            <div className="field">
+              <label className="label">CUI / IDNO</label>
+              <input className="input mono" inputMode="numeric" value={draft.registry_id ?? ''} onChange={(e) => onChange({ ...draft, registry_id: e.target.value || null })} />
+            </div>
           </div>
           <div className="field">
             <label className="label">Produse / servicii (separate prin virgulă)</label>

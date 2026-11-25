@@ -30,7 +30,7 @@ export function Evenimente() {
           {data?.length === 0 && <Empty hand="niciun târg încă">Adaugă primul eveniment, ex: „BIFE-SIM 2026”.</Empty>}
           {data?.map((e) => {
             const active = cur?.id === e.id
-            const n = e.companies[0]?.count ?? 0
+            const n = e.encounters[0]?.count ?? 0
             return (
               <div key={e.id} className={`card ${active ? 'ink' : ''}`}>
                 <div className="row" style={{ alignItems: 'flex-start' }}>

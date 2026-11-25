@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { extractDraft, transcribeAudio } from '../lib/ai'
-import { saveDraft, useInvalidate } from '../lib/api'
+import { companyHasLogo, saveDraft, uploadCardImages, uploadLogo, useInvalidate } from '../lib/api'
 import { useCurrentEvent } from '../lib/currentEvent'
-import { fmtSeconds, imageToDataUrl, useRecorder } from '../lib/media'
+import { cropToPng, fmtSeconds, imageToDataUrl, useRecorder } from '../lib/media'
 import { enqueue } from '../lib/offlineQueue'
 import { emptyDraft, type Draft, type NoteSource } from '../lib/types'
 import { DraftForm } from './DraftForm'
@@ -23,6 +23,7 @@ export function CaptureSheet({ onClose, initialMode = 'voce' }: { onClose: () =>
   const [draft, setDraft] = useState<Draft | null>(null)
   const [into, setInto] = useState<{ id: string; name: string } | null>(null)
   const [source, setSource] = useState<NoteSource>('text')
+  const [place, setPlace] = useState('')
   const rec = useRecorder()
   const ev = useCurrentEvent()
   const toast = useToast()
@@ -82,7 +83,17 @@ export function CaptureSheet({ onClose, initialMode = 'voce' }: { onClose: () =>
     if (!into && !draft.company.name.trim()) return toast('Completează numele firmei', true)
     setStep('saving')
     try {
-      const id = await saveDraft(draft, { eventId: ev?.id ?? null, source, intoCompanyId: into?.id })
+      const id = await saveDraft(draft, { eventId: ev?.id ?? null, source, intoCompanyId: into?.id, place })
+      if (images.length) {
+        // poza cărții se păstrează pe fișă; logo-ul se decupează de pe carte dacă firma nu are unul
+        await uploadCardImages(id, images).catch((e) => toast(`Poza cărții nu s-a salvat: ${errText(e)}`, true))
+        const box = draft.logo_box
+        if (box && images[box.image] && !(await companyHasLogo(id))) {
+          await cropToPng(images[box.image], box)
+            .then((png) => uploadLogo(id, png))
+            .catch(() => {})
+        }
+      }
       invalidate(id)
       toast(into ? `Adăugat la ${into.name}` : 'Conexiune salvată ✓')
       onClose()
@@ -193,6 +204,10 @@ export function CaptureSheet({ onClose, initialMode = 'voce' }: { onClose: () =>
       {(step === 'review' || step === 'saving') && draft && (
         <>
           <DraftForm draft={draft} onChange={setDraft} intoCompany={into} onIntoCompany={setInto} />
+          <div className="field" style={{ marginTop: 12 }}>
+            <label className="label">Unde v-ați întâlnit {ev ? `(pe lângă ${ev.name})` : ''}</label>
+            <input className="input" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="ex: stand B12, Moldexpo · cină cu furnizorii" />
+          </div>
           <div className="row" style={{ marginTop: 18, position: 'sticky', bottom: 0 }}>
             <button className="btn-l" onClick={() => setStep('input')} disabled={step === 'saving'}>
               Înapoi

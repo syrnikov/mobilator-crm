@@ -1,5 +1,5 @@
 import type { Company, FinancialYear } from '../lib/types'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { fmtDate, useToast } from './ui'
 
 const compact = (n: number) => new Intl.NumberFormat('ro-RO', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
@@ -33,6 +33,7 @@ export function CompanyProfile({ c, onResearch, busy }: { c: Company; onResearch
         <div className="stack" style={{ gap: 10 }}>
           <KeyFigures c={c} years={years} />
           {years.length > 0 && <FinanceChart years={years} />}
+          {years.length > 0 && <FinanceTable years={years} />}
           <RegistryDetails c={c} />
         </div>
       )}
@@ -187,18 +188,72 @@ function RegistryDetails({ c }: { c: Company }) {
   )
 }
 
-const SOCIAL_LABEL: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok' }
+const SOCIAL_LABEL: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube' }
+const SOCIAL_ORDER = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube']
 
+/** Rețelele brandului — sus pe fișă, înainte de riglă. */
 export function SocialLinks({ c }: { c: Company }) {
-  const entries = Object.entries(c.socials ?? {}).filter(([, v]) => v)
+  const entries = Object.entries(c.socials ?? {})
+    .filter(([, v]) => v)
+    .sort(([a], [b]) => SOCIAL_ORDER.indexOf(a) - SOCIAL_ORDER.indexOf(b))
   if (!entries.length) return null
   return (
-    <div className="row wrap" style={{ marginTop: 10 }}>
+    <div className="socials">
       {entries.map(([k, v]) => (
-        <a key={k} className="chip" href={v} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-          <Icon name="link" size={12} /> {SOCIAL_LABEL[k] ?? k}
+        <a key={k} className={`social social-${k}`} href={v} target="_blank" rel="noreferrer">
+          <Icon name={(SOCIAL_LABEL[k] ? k : 'link') as IconName} size={18} />
+          <span>{SOCIAL_LABEL[k] ?? k}</span>
         </a>
       ))}
+    </div>
+  )
+}
+
+// ───────────── Tabel financiar (ca pe listafirme) ─────────────
+const COLS: { key: keyof FinancialYear; label: string }[] = [
+  { key: 'revenue', label: 'Cifra de afaceri' },
+  { key: 'net_profit', label: 'Profit net' },
+  { key: 'debts', label: 'Datorii totale' },
+  { key: 'fixed_assets', label: 'Active imobilizate' },
+  { key: 'current_assets', label: 'Active circulante' },
+  { key: 'equity', label: 'Capitaluri proprii' },
+  { key: 'employees', label: 'Nr. salariați' },
+]
+const full = (n: number) => new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 }).format(n).replace(/\./g, ' ')
+
+function FinanceTable({ years }: { years: FinancialYear[] }) {
+  const rows = [...years].sort((a, b) => b.year - a.year)
+  const cols = COLS.filter((col) => rows.some((r) => r[col.key] != null))
+  return (
+    <div className="card" style={{ padding: 0 }}>
+      <div className="fin-table-wrap">
+        <table className="fin-table">
+          <thead>
+            <tr>
+              <th>An</th>
+              {cols.map((col) => (
+                <th key={col.key}>{col.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.year}>
+                <td className="yr">{r.year}</td>
+                {cols.map((col) => {
+                  const v = r[col.key] as number | null | undefined
+                  return (
+                    <td key={col.key} className={v != null && v < 0 ? 'neg' : ''}>
+                      {v == null ? '—' : full(v)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="label" style={{ padding: '6px 12px 10px' }}>valori în {rows[0].currency} · glisează lateral pentru toate coloanele</div>
     </div>
   )
 }

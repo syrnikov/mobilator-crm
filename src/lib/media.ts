@@ -75,3 +75,26 @@ export async function imageToPng(file: File, max = 256): Promise<Blob> {
   canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Imagine invalidă'))), 'image/png'))
 }
+
+/** Decupează o zonă (coordonate relative 0–1) dintr-o imagine și o întoarce ca PNG (pentru logo de pe carte). */
+export async function cropToPng(
+  dataUrl: string,
+  box: { x: number; y: number; w: number; h: number },
+  max = 320,
+): Promise<Blob> {
+  const img = new Image()
+  img.src = dataUrl
+  await img.decode()
+  const pad = 0.015
+  const clamp = (v: number) => Math.min(1, Math.max(0, v))
+  const x0 = clamp(box.x - pad), y0 = clamp(box.y - pad)
+  const x1 = clamp(box.x + box.w + pad), y1 = clamp(box.y + box.h + pad)
+  const sw = (x1 - x0) * img.naturalWidth, sh = (y1 - y0) * img.naturalHeight
+  if (sw < 12 || sh < 12) throw new Error('Zona logo-ului e prea mică')
+  const scale = Math.min(1, max / Math.max(sw, sh))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(sw * scale)
+  canvas.height = Math.round(sh * scale)
+  canvas.getContext('2d')!.drawImage(img, x0 * img.naturalWidth, y0 * img.naturalHeight, sw, sh, 0, 0, canvas.width, canvas.height)
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Decupare eșuată'))), 'image/png'))
+}

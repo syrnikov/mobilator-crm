@@ -407,3 +407,39 @@ h3 { font-size: 18px; }
 .tile-sub.pos { color: var(--ok); }
 .tile-sub.neg { color: var(--or-dk); }
 .key { display: inline-block; width: 10px; height: 10px; border-radius: 1px; }
+
+/* ───── Rețele brand (sus pe fișă) ───── */
+.socials { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.social {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px;
+  background: var(--white); color: var(--ink); text-decoration: none;
+  border: 1.5px solid var(--ink); border-radius: 19px;
+  font-family: var(--f-head); font-weight: 600; font-size: 14px;
+}
+.social-instagram { color: #c13584; border-color: #c13584; }
+.social-facebook { color: #1877f2; border-color: #1877f2; }
+.social-tiktok { color: var(--ink); }
+.social-linkedin { color: #0a66c2; border-color: #0a66c2; }
+
+/* ───── Tabel financiar ───── */
+.fin-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fin-table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 15px; }
+.fin-table th {
+  position: sticky; top: 0; background: var(--paper); text-align: right;
+  font-family: var(--f-head); font-weight: 600; font-size: 13px; line-height: 1.2;
+  padding: 10px 12px; border-bottom: 1.5px solid var(--ink); max-width: 92px; white-space: normal;
+}
+.fin-table th:first-child, .fin-table td.yr {
+  position: sticky; left: 0; text-align: left; background: var(--white); z-index: 1;
+  border-right: 1px solid var(--line);
+}
+.fin-table th:first-child { background: var(--paper); z-index: 2; }
+.fin-table td { padding: 10px 12px; text-align: right; font-family: var(--f-mono); font-size: 14px; border-bottom: 1px solid var(--paper-3); white-space: nowrap; }
+.fin-table td.yr { font-weight: 700; }
+.fin-table td.neg { color: var(--or-dk); }
+.fin-table tr:last-child td { border-bottom: 0; }
+
+/* ───── Notițe pliabile ───── */
+.note-chev { display: inline-grid; transition: transform 0.15s ease; }
+.note.collapsed .note-chev { transform: rotate(-90deg); }
+.note-preview { margin-top: 2px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }

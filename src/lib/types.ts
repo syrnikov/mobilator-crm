@@ -28,6 +28,7 @@ export interface Note {
   company_id: string
   body: string
   source: NoteSource
+  collapsed: boolean
   created_by: string | null
   created_at: string
 }
@@ -77,6 +78,7 @@ export interface Company {
   registry_source: string | null
   registry_url: string | null
   enriched_at: string | null
+  card_images: string[]
 }
 
 export interface FinancialYear {
@@ -84,8 +86,21 @@ export interface FinancialYear {
   revenue: number | null
   net_profit: number | null
   total_assets: number | null
+  debts?: number | null
+  fixed_assets?: number | null
+  current_assets?: number | null
+  equity?: number | null
   employees: number | null
   currency: 'RON' | 'MDL'
+}
+
+export interface Encounter {
+  id: string
+  company_id: string
+  event_id: string | null
+  place: string | null
+  met_on: string
+  events?: { id: string; name: string } | null
 }
 
 export interface CompanyListItem extends Company {
@@ -98,6 +113,7 @@ export interface CompanyFull extends Company {
   notes: Note[]
   tasks: Task[]
   events: Pick<EventRow, 'id' | 'name'> | null
+  encounters: Encounter[]
 }
 
 /** Ce întoarce AI-ul la extragere (și formularul de editare). */
@@ -118,6 +134,10 @@ export interface Draft {
   tasks: { title: string; due_at: string | null }[]
   tags: string[]
   status: CompanyStatus
+  socials?: { facebook: string | null; instagram: string | null; tiktok: string | null }
+  registry_id?: string | null
+  /** dreptunghiul logo-ului pe poza cărții de vizită (0–1) */
+  logo_box?: { image: number; x: number; y: number; w: number; h: number } | null
 }
 
 export const STATUS_LABEL: Record<CompanyStatus, string> = {

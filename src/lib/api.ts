@@ -14,13 +14,14 @@ export function useCompanies(filters: { q: string; status: CompanyStatus | ''; e
   return useQuery({
     queryKey: ['companies', filters],
     queryFn: async () => {
+      const sel = filters.eventId ? `${LIST_SELECT}, encounters!inner(event_id)` : LIST_SELECT
       let q = filters.q.trim()
-        ? supabase.rpc('search_companies', { q: filters.q, max_results: 200 }).select(LIST_SELECT)
-        : supabase.from('companies').select(LIST_SELECT).order('updated_at', { ascending: false }).limit(500)
+        ? supabase.rpc('search_companies', { q: filters.q, max_results: 200 }).select(sel)
+        : supabase.from('companies').select(sel).order('updated_at', { ascending: false }).limit(500)
       if (filters.status) q = q.eq('status', filters.status)
       else q = q.neq('status', 'arhivat')
-      if (filters.eventId) q = q.eq('event_id', filters.eventId)
-      return must(await q) as CompanyListItem[]
+      if (filters.eventId) q = q.eq('encounters.event_id', filters.eventId)
+      return must(await q) as unknown as CompanyListItem[]
     },
   })
 }
@@ -33,13 +34,14 @@ export function useCompany(id: string | undefined) {
       const c = must(
         await supabase
           .from('companies')
-          .select('*, people(*), notes(*), tasks(*), events(id, name)')
+          .select('*, people(*), notes(*), tasks(*), events(id, name), encounters(*, events(id, name))')
           .eq('id', id!)
           .single(),
       ) as CompanyFull
       c.notes.sort((a, b) => b.created_at.localeCompare(a.created_at))
       c.tasks.sort((a, b) => Number(a.done) - Number(b.done) || (a.due_at ?? '9').localeCompare(b.due_at ?? '9'))
       c.people.sort((a, b) => a.full_name.localeCompare(b.full_name))
+      c.encounters.sort((a, b) => b.met_on.localeCompare(a.met_on))
       return c
     },
   })
@@ -54,12 +56,36 @@ export function useInvalidate() {
   }
 }
 
-export async function findSimilarCompanies(name: string) {
-  if (name.trim().length < 3) return []
-  return must(await supabase.rpc('search_companies', { q: name, max_results: 3 }).select('id, name, city')) as Pick<
-    Company,
-    'id' | 'name' | 'city'
-  >[]
+export interface CompanyMatch {
+  id: string
+  name: string
+  city: string | null
+  reason: 'cod fiscal' | 'telefon' | 'email' | 'nume'
+  score: number
+}
+
+/** Există deja firma? Potrivire după cod fiscal, telefon, email (sigure) sau nume (posibilă). */
+export async function matchCompanies(d: Draft): Promise<CompanyMatch[]> {
+  const phones = [d.company.phone, ...d.people.map((p) => p.phone)].filter(Boolean) as string[]
+  const emails = [d.company.email, ...d.people.map((p) => p.email)].filter(Boolean) as string[]
+  if (d.company.name.trim().length < 3 && !phones.length && !emails.length && !d.registry_id) return []
+  return must(
+    await supabase.rpc('match_companies', {
+      p_name: d.company.name.trim().length >= 3 ? d.company.name : '',
+      p_phones: phones,
+      p_emails: emails,
+      p_registry: d.registry_id ?? null,
+    }),
+  ) as CompanyMatch[]
+}
+
+/** Înregistrează unde am întâlnit firma (ignoră dublura pentru același eveniment). */
+export async function addEncounter(companyId: string, e: { eventId: string | null; place?: string | null }) {
+  if (!e.eventId && !e.place?.trim()) return
+  const { error } = await supabase
+    .from('encounters')
+    .insert({ company_id: companyId, event_id: e.eventId, place: e.place?.trim() || null })
+  if (error && error.code !== '23505') throw new Error(error.message)
 }
 
 const nn = (s: string | null | undefined) => (s && s.trim() ? s.trim() : null)
@@ -67,7 +93,7 @@ const nn = (s: string | null | undefined) => (s && s.trim() ? s.trim() : null)
 /** Salvează o fișă extrasă de AI (sau completată manual). Dacă `intoCompanyId` e dat, adaugă la firma existentă. */
 export async function saveDraft(
   draft: Draft,
-  opts: { eventId: string | null; source: Note['source']; rawText?: string; intoCompanyId?: string },
+  opts: { eventId: string | null; source: Note['source']; rawText?: string; intoCompanyId?: string; place?: string | null },
 ): Promise<string> {
   let companyId = opts.intoCompanyId
   const c = draft.company
@@ -88,6 +114,8 @@ export async function saveDraft(
           status: draft.status,
           tags: draft.tags.filter(Boolean),
           event_id: opts.eventId,
+          registry_id: draft.registry_id?.replace(/\D/g, '') || null,
+          socials: socialsFromDraft(draft),
         })
         .select('id')
         .single(),
@@ -106,7 +134,61 @@ export async function saveDraft(
   const tasks = draft.tasks.filter((t) => t.title.trim())
   if (tasks.length)
     must(await supabase.from('tasks').insert(tasks.map((t) => ({ company_id: companyId, title: t.title.trim(), due_at: t.due_at || null }))))
+  await addEncounter(companyId!, { eventId: opts.eventId, place: opts.place })
+  if (opts.intoCompanyId) {
+    // firmă existentă: completăm rețelele / codul fiscal lipsă, fără să suprascriem
+    const { data: cur } = await supabase.from('companies').select('socials, registry_id').eq('id', companyId!).single()
+    const patch: Record<string, unknown> = { socials: { ...socialsFromDraft(draft), ...(cur?.socials ?? {}) } }
+    if (!cur?.registry_id && draft.registry_id) patch.registry_id = draft.registry_id.replace(/\D/g, '')
+    await supabase.from('companies').update(patch).eq('id', companyId!)
+  }
   return companyId!
+}
+
+const SOCIAL_BASE: Record<string, string> = {
+  instagram: 'https://www.instagram.com/',
+  facebook: 'https://www.facebook.com/',
+  tiktok: 'https://www.tiktok.com/@',
+}
+export function socialUrl(kind: string, v: string) {
+  const t = v.trim()
+  if (/^https?:\/\//i.test(t)) return t
+  if (/\.(com|ro|md)\//i.test(t)) return `https://${t}`
+  return (SOCIAL_BASE[kind] ?? 'https://') + t.replace(/^@/, '')
+}
+function socialsFromDraft(d: Draft) {
+  return Object.fromEntries(
+    Object.entries(d.socials ?? {})
+      .filter(([, v]) => v)
+      .map(([k, v]) => [k, socialUrl(k, v as string)]),
+  )
+}
+
+// ───────────── Cărți de vizită (bucket privat) ─────────────
+export async function uploadCardImages(companyId: string, dataUrls: string[]) {
+  const paths: string[] = []
+  for (const url of dataUrls) {
+    const blob = await (await fetch(url)).blob()
+    const path = `${companyId}/${Date.now()}-${paths.length}.jpg`
+    const { error } = await supabase.storage.from('carti').upload(path, blob, { contentType: 'image/jpeg' })
+    if (error) throw new Error(error.message)
+    paths.push(path)
+  }
+  if (!paths.length) return
+  const { data } = await supabase.from('companies').select('card_images').eq('id', companyId).single()
+  must(await supabase.from('companies').update({ card_images: [...(data?.card_images ?? []), ...paths] }).eq('id', companyId))
+}
+
+export async function cardImageUrls(paths: string[]): Promise<Record<string, string>> {
+  if (!paths.length) return {}
+  const { data, error } = await supabase.storage.from('carti').createSignedUrls(paths, 3600)
+  if (error) throw new Error(error.message)
+  return Object.fromEntries((data ?? []).filter((d) => d.signedUrl).map((d) => [d.path!, d.signedUrl as string]))
+}
+
+export async function companyHasLogo(companyId: string) {
+  const { data } = await supabase.from('companies').select('logo_url').eq('id', companyId).single()
+  return !!data?.logo_url
 }
 
 export function useUpdateCompany(id: string) {
@@ -138,6 +220,19 @@ export function useRowMutations(companyId: string) {
     addNote: useMutation({
       mutationFn: async (n: { body: string; source?: Note['source'] }) =>
         must(await supabase.from('notes').insert({ company_id: companyId, body: n.body, source: n.source ?? 'text' })),
+      ...done,
+    }),
+    toggleNote: useMutation({
+      mutationFn: async (n: { id: string; collapsed: boolean }) =>
+        must(await supabase.from('notes').update({ collapsed: n.collapsed }).eq('id', n.id)),
+      ...done,
+    }),
+    addEncounter: useMutation({
+      mutationFn: async (e: { eventId: string | null; place?: string | null }) => addEncounter(companyId, e),
+      ...done,
+    }),
+    deleteEncounter: useMutation({
+      mutationFn: async (id: string) => must(await supabase.from('encounters').delete().eq('id', id)),
       ...done,
     }),
     deleteNote: useMutation({
@@ -176,8 +271,8 @@ export function useEvents() {
     queryKey: ['events'],
     queryFn: async () =>
       must(
-        await supabase.from('events').select('*, companies(count)').order('starts_on', { ascending: false, nullsFirst: true }),
-      ) as (EventRow & { companies: { count: number }[] })[],
+        await supabase.from('events').select('*, encounters(count)').order('starts_on', { ascending: false, nullsFirst: true }),
+      ) as (EventRow & { encounters: { count: number }[] })[],
   })
 }
 

@@ -5,6 +5,10 @@ export interface FinancialYear {
   revenue: number | null
   net_profit: number | null
   total_assets: number | null
+  debts: number | null
+  fixed_assets: number | null
+  current_assets: number | null
+  equity: number | null
   employees: number | null
   currency: 'RON' | 'MDL'
 }
@@ -88,6 +92,10 @@ export async function anaf(cuiRaw: string): Promise<RegistryData | null> {
         revenue: ind('I13'),
         net_profit: profit || loss ? (profit ?? 0) - (loss ?? 0) : profit,
         total_assets: (ind('I1') ?? 0) + (ind('I2') ?? 0) || null,
+        debts: ind('I7'),
+        fixed_assets: ind('I1'),
+        current_assets: ind('I2'),
+        equity: ind('I10'),
         employees: ind('I20'),
         currency: 'RON' as const,
       }
@@ -226,6 +234,10 @@ export async function datero(idnoRaw: string): Promise<RegistryData | null> {
       revenue: y.revenue ?? null,
       net_profit: y.net_profit ?? null,
       total_assets: y.total_assets ?? null,
+      debts: y.long_term_debt != null || y.current_debt != null ? (y.long_term_debt ?? 0) + (y.current_debt ?? 0) : null,
+      fixed_assets: y.fixed_assets ?? null,
+      current_assets: y.current_assets ?? null,
+      equity: y.equity ?? null,
       employees: y.employees ?? null,
       currency: 'MDL' as const,
     }))

@@ -26,8 +26,8 @@ const identifySchema = {
     socials: {
       type: 'object',
       additionalProperties: false,
-      required: ['facebook', 'instagram', 'linkedin'],
-      properties: { facebook: nul('string'), instagram: nul('string'), linkedin: nul('string') },
+      required: ['facebook', 'instagram', 'tiktok', 'linkedin'],
+      properties: { facebook: nul('string'), instagram: nul('string'), tiktok: nul('string'), linkedin: nul('string') },
     },
     notes: { ...nul('string'), description: 'alte informații relevante găsite: clienți, export, certificări, showroom, mărime' },
     sources: { type: 'array', items: { type: 'string' } },
@@ -47,7 +47,7 @@ type Identify = {
   city: string | null
   category: string | null
   products: string[]
-  socials: { facebook: string | null; instagram: string | null; linkedin: string | null }
+  socials: { facebook: string | null; instagram: string | null; tiktok: string | null; linkedin: string | null }
   notes: string | null
   sources: string[]
 }
@@ -67,7 +67,8 @@ export async function researchCompany(supabase: SupabaseClient, companyId: strin
       'Ești cercetătorul Mobilator (producător român de mobilier la comandă). Identifică firma de mai jos și adună date publice verificate.\n' +
       '• România: caută codul fiscal (CUI) pe listafirme.ro, termene.ro, risco.ro sau openapi.ro.\n' +
       '• Moldova: caută IDNO (13 cifre, de obicei începe cu 100) pe datero.md, idno.md sau srl.md.\n' +
-      '• Caută site-ul oficial și pagina de contact: telefoane de business, email, adresă, rețele sociale.\n' +
+      '• Caută site-ul oficial și pagina de contact: telefoane de business, email, adresă.\n' +
+      '• Caută OBLIGATORIU paginile de Instagram, Facebook și TikTok ale brandului (o căutare „<nume> instagram” găsește de obicei profilul).\n' +
       '• Folosește orașul, persoanele și produsele ca să alegi firma corectă dacă există mai multe cu nume similar.\n' +
       'Nu inventa nimic: dacă nu ești sigur, pune null. Răspunde în română.',
     input: JSON.stringify({
@@ -101,7 +102,7 @@ export async function researchCompany(supabase: SupabaseClient, companyId: strin
   const emails = uniq([...id.emails, ...(site?.emails ?? [])].map((e) => e.toLowerCase()))
   const website = c.website || id.website
   const socials = {
-    ...Object.fromEntries(Object.entries(id.socials).filter(([, v]) => v)),
+    ...Object.fromEntries(Object.entries(id.socials).filter(([, v]) => v).map(([k, v]) => [k, socialUrl(k, v as string)])),
     ...(site?.socials ?? {}),
     ...(c.socials ?? {}),
   }
@@ -177,6 +178,21 @@ export async function researchCompany(supabase: SupabaseClient, companyId: strin
     sources: [...id.sources, ...(reg ? [reg.url] : [])],
     updated: Object.keys(patch),
   }
+}
+
+/** „@handle” sau „instagram.com/x” → URL complet. */
+export function socialUrl(kind: string, v: string): string {
+  const t = v.trim()
+  if (/^https?:\/\//i.test(t)) return t
+  if (/\.(com|ro|md)\//i.test(t)) return `https://${t.replace(/^\/+/, '')}`
+  const h = t.replace(/^@/, '')
+  const base: Record<string, string> = {
+    instagram: 'https://www.instagram.com/',
+    facebook: 'https://www.facebook.com/',
+    tiktok: 'https://www.tiktok.com/@',
+    linkedin: 'https://www.linkedin.com/company/',
+  }
+  return (base[kind] ?? 'https://') + h
 }
 
 const uniq = (a: string[]) => [...new Set(a.map((s) => s.trim()).filter(Boolean))]

@@ -113,7 +113,11 @@ export function googleCalendarUrl(ev: CalEvent) {
 }
 
 // ───────────── vCard ─────────────
-export function buildVcard(person: Pick<Person, 'full_name' | 'role' | 'phone' | 'email'> | null, company: Company): string {
+export function buildVcard(
+  person: Pick<Person, 'full_name' | 'role' | 'phone' | 'email'> | null,
+  company: Company,
+  photoJpegBase64?: string | null,
+): string {
   const name = person?.full_name ?? company.name
   const parts = name.trim().split(/\s+/)
   const last = parts.length > 1 ? parts.pop()! : ''
@@ -134,14 +138,58 @@ export function buildVcard(person: Pick<Person, 'full_name' | 'role' | 'phone' |
       ? `ADR;TYPE=WORK:;;${esc(company.address ?? '')};${esc(company.city ?? '')};;;${esc(company.country ?? '')}`
       : '',
     `NOTE:${esc('Adăugat din Mobilator CRM' + (company.category ? ` — ${company.category}` : ''))}`,
+    photoJpegBase64 ? fold(`PHOTO;ENCODING=b;TYPE=JPEG:${photoJpegBase64}`) : '',
     'END:VCARD',
   ]
     .filter(Boolean)
     .join('\r\n')
 }
 
-export const saveContact = (person: Person | null, company: Company) =>
-  shareOrDownload(`${slug(person?.full_name ?? company.name)}.vcf`, buildVcard(person, company), 'text/vcard')
+/** Liniile vCard lungi se „pliază” la 75 de caractere (CRLF + spațiu). */
+const fold = (line: string) => line.replace(/(.{74})(?=.)/g, '$1\r\n ')
+
+/** Imagine (URL) → JPEG base64 pătrat, pentru poza contactului. */
+async function toJpegBase64(url: string, size = 256): Promise<string | null> {
+  try {
+    const blob = await (await fetch(url)).blob()
+    const bmp = await createImageBitmap(blob)
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = size
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, size, size)
+    const s = Math.min((size * 0.86) / bmp.width, (size * 0.86) / bmp.height)
+    ctx.drawImage(bmp, (size - bmp.width * s) / 2, (size - bmp.height * s) / 2, bmp.width * s, bmp.height * s)
+    return canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
+  } catch {
+    return null
+  }
+}
+
+/** Salvează în agenda telefonului; logo-ul firmei devine poza contactului. */
+export async function saveContact(person: Person | null, company: Company) {
+  const photo = company.logo_url ? await toJpegBase64(company.logo_url) : null
+  await shareOrDownload(`${slug(person?.full_name ?? company.name)}.vcf`, buildVcard(person, company, photo), 'text/vcard')
+}
+
+/** Salvează o poză (ex. cartea de vizită) — pe iPhone foaia de share are „Salvează imaginea” → Poze. */
+export async function saveImage(url: string, filename: string) {
+  const blob = await (await fetch(url)).blob()
+  const file = new File([blob], filename, { type: blob.type || 'image/jpeg' })
+  if (/android|iphone|ipad|ipod/i.test(navigator.userAgent) && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] })
+      return
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return
+    }
+  }
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
 
 /** Share nativ; fallback: copiere în clipboard. Întoarce 'shared' | 'copied' | 'cancelled'. */
 export async function shareText(title: string, text: string): Promise<'shared' | 'copied' | 'cancelled'> {
