@@ -173,7 +173,7 @@ export function Firma() {
           </button>
         </div>
         <div className="card">
-          {c.ai_summary ? <div className="summary">{c.ai_summary}</div> : <div className="mute">Încă nu există un rezumat. AI-ul caută firma pe web, în registrul oficial (ANAF / datero.md) și pe site-ul ei.</div>}
+          {c.ai_summary ? <Summary text={c.ai_summary} /> : <div className="mute">Încă nu există un rezumat. AI-ul caută firma pe web, în registrul oficial (ANAF / datero.md) și pe site-ul ei.</div>}
           {c.enriched_at && <div className="label" style={{ marginTop: 6 }}>actualizat {fmtDateTime(c.enriched_at)}</div>}
           <dl className="kv" style={{ marginTop: 12 }}>
             {c.phone && (<><dt>Telefon</dt><dd><a href={telUrl(c.phone)}>{c.phone}</a></dd></>)}
@@ -224,6 +224,22 @@ export function Firma() {
       {editing && <EditCompany company={c} onClose={() => setEditing(false)} />}
       {person && <EditPerson company={c} person={person} onClose={() => setPerson(null)} />}
     </>
+  )
+}
+
+// ───────────── Rezumat pliabil ─────────────
+function Summary({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const long = text.length > 220
+  return (
+    <div className="summary">
+      <div className={long && !open ? 'clamp-3' : ''}>{text}</div>
+      {long && (
+        <button className="more" onClick={() => setOpen(!open)}>
+          {open ? 'Mai puțin' : 'Mai mult'}
+        </button>
+      )}
+    </div>
   )
 }
 

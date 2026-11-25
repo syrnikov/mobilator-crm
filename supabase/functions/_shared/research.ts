@@ -214,9 +214,9 @@ async function summarize(
     name: 'summary',
     schema: { type: 'object', additionalProperties: false, required: ['summary'], properties: { summary: { type: 'string' } } },
     instructions:
-      'Scrie în română un rezumat de 3-5 propoziții despre firmă pentru echipa Mobilator (producător de mobilier la comandă): ' +
-      'ce face, de când există și cât de mare e, evoluția cifrei de afaceri și a profitului (cu cifre rotunjite, ex. „4,6 mil. MDL”), ' +
-      'și de ce ar putea fi relevantă (furnizor, client, colaborator). Fără liste, fără inventii — folosește doar datele primite.',
+      'Scrie în română un rezumat FOARTE SCURT despre firmă pentru echipa Mobilator (producător de mobilier la comandă): ' +
+      'maxim 2-3 propoziții scurte, sub 300 de caractere în total. Spune ce face firma, cât de mare e (cifră de afaceri rotunjită, ex. „4,6 mil. MDL”, ' +
+      'dacă există) și de ce ar fi relevantă pentru Mobilator. Fără detalii juridice (formă, dată exactă, adresă — apar deja pe fișă), fără liste, fără inventii.',
     input: JSON.stringify({
       nume: c.name,
       denumire_legala: reg?.legal_name ?? id.legal_name,
