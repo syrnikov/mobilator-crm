@@ -10,7 +10,10 @@ export function Layout() {
   const screen = useRef<HTMLDivElement>(null)
   const { pathname } = useLocation()
   // fiecare ecran pornește de sus
-  useEffect(() => screen.current?.scrollTo(0, 0), [pathname])
+  // acolade obligatorii: în browserele noi scrollTo() întoarce un Promise, iar React l-ar trata drept funcție de cleanup
+  useEffect(() => {
+    screen.current?.scrollTo(0, 0)
+  }, [pathname])
   return (
     <div className="app">
       {/* doar zona asta derulează — documentul stă pe loc, deci bara de jos din iOS nu mai sare */}
