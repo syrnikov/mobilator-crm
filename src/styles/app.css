@@ -443,3 +443,12 @@ h3 { font-size: 18px; }
 .note-chev { display: inline-grid; transition: transform 0.15s ease; }
 .note.collapsed .note-chev { transform: rotate(-90deg); }
 .note-preview { margin-top: 2px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+
+/* ───── Decupare logo de pe carte ───── */
+.crop-frame { position: relative; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; line-height: 0; }
+.crop-frame img { width: 100%; border: 1.5px solid var(--ink); border-radius: var(--r); pointer-events: none; }
+.crop-box {
+  position: absolute; border: 2px solid var(--or); background: rgba(247, 78, 0, 0.12);
+  box-shadow: 0 0 0 9999px rgba(21, 19, 16, 0.45);
+}
+.find-socials { margin-top: 12px; }

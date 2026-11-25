@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { extractDraft, transcribeAudio } from '../lib/ai'
+import { extractDraft, researchCompany, transcribeAudio } from '../lib/ai'
 import { companyHasLogo, saveDraft, uploadCardImages, uploadLogo, useInvalidate } from '../lib/api'
 import { useCurrentEvent } from '../lib/currentEvent'
 import { cropToPng, fmtSeconds, imageToDataUrl, useRecorder } from '../lib/media'
@@ -84,20 +84,34 @@ export function CaptureSheet({ onClose, initialMode = 'voce' }: { onClose: () =>
     setStep('saving')
     try {
       const id = await saveDraft(draft, { eventId: ev?.id ?? null, source, intoCompanyId: into?.id, place })
+      let logoMsg = ''
       if (images.length) {
         // poza cărții se păstrează pe fișă; logo-ul se decupează de pe carte dacă firma nu are unul
         await uploadCardImages(id, images).catch((e) => toast(`Poza cărții nu s-a salvat: ${errText(e)}`, true))
         const box = draft.logo_box
-        if (box && images[box.image] && !(await companyHasLogo(id))) {
-          await cropToPng(images[box.image], box)
-            .then((png) => uploadLogo(id, png))
-            .catch(() => {})
+        if (!(await companyHasLogo(id))) {
+          if (box && images[box.image]) {
+            try {
+              await uploadLogo(id, await cropToPng(images[box.image], box))
+              logoMsg = ' · logo decupat de pe carte'
+            } catch (e) {
+              logoMsg = ` · logo nedecupat (${errText(e)})`
+            }
+          } else {
+            logoMsg = ' · n-am găsit logo pe carte — îl poți decupa din poza cărții'
+          }
         }
       }
       invalidate(id)
-      toast(into ? `Adăugat la ${into.name}` : 'Conexiune salvată ✓')
+      toast((into ? `Adăugat la ${into.name}` : 'Conexiune salvată ✓') + logoMsg)
       onClose()
       nav(`/firma/${id}`)
+      // firmă nouă: căutăm în fundal rețele sociale, logo, site și date oficiale
+      if (!into && navigator.onLine) {
+        researchCompany(id)
+          .then(() => invalidate(id))
+          .catch(() => {})
+      }
     } catch (e) {
       toast(errText(e), true)
       setStep('review')

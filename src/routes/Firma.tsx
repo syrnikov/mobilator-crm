@@ -10,6 +10,7 @@ import { cardImageUrls, deleteCompany, uploadLogo, useCompany, useEvents, useInv
 import { fmtSeconds, imageToPng, useRecorder } from '../lib/media'
 import { mailtoUrl, mapsUrl, saveContact, saveImage, telUrl, webUrl, type CalEvent } from '../lib/shortcuts'
 import { MessageSheet, type MessageTarget } from '../components/MessageSheet'
+import { LogoCrop } from '../components/LogoCrop'
 import { useCurrentEvent } from '../lib/currentEvent'
 import { STATUS_LABEL, STATUSES, type Company, type CompanyFull, type Person } from '../lib/types'
 
@@ -132,7 +133,14 @@ export function Firma() {
             </div>
           </div>
         </div>
-        <SocialLinks c={c} />
+        {Object.values(c.socials ?? {}).some(Boolean) ? (
+          <SocialLinks c={c} />
+        ) : (
+          <button className="btn-l sm find-socials" onClick={research} disabled={!!busy}>
+            <Icon name="instagram" size={16} /> <Icon name="facebook" size={16} /> <Icon name="tiktok" size={16} />
+            {busy ? 'Caut…' : 'Caută rețelele sociale'}
+          </button>
+        )}
         <Encounters company={c} />
         <div className="rigla" style={{ margin: '12px -18px 14px' }} />
 
@@ -504,7 +512,9 @@ function Encounters({ company }: { company: CompanyFull }) {
 function CardImages({ company }: { company: CompanyFull }) {
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [open, setOpen] = useState<string | null>(null)
+  const [cropping, setCropping] = useState(false)
   const toast = useToast()
+  const invalidate = useInvalidate()
   const key = company.card_images.join('|')
   useEffect(() => {
     cardImageUrls(company.card_images).then(setUrls).catch(() => setUrls({}))
@@ -529,8 +539,29 @@ function CardImages({ company }: { company: CompanyFull }) {
         )}
       </div>
       {open && urls[open] && (
-        <Sheet title="Carte de vizită" onClose={() => setOpen(null)}>
+        <Sheet
+          title={cropping ? 'Decupează logo-ul' : 'Carte de vizită'}
+          onClose={() => {
+            setOpen(null)
+            setCropping(false)
+          }}
+        >
+          {cropping ? (
+            <LogoCrop
+              src={urls[open]}
+              companyId={company.id}
+              onDone={() => {
+                invalidate(company.id)
+                setCropping(false)
+                setOpen(null)
+              }}
+            />
+          ) : (
+          <>
           <img src={urls[open]} alt="Carte de vizită" style={{ width: '100%', border: '1.5px solid var(--ink)', borderRadius: 2 }} />
+          <button className="btn-l block" style={{ marginTop: 12, width: '100%' }} onClick={() => setCropping(true)}>
+            <Icon name="image" /> Decupează logo-ul de pe carte
+          </button>
           <button
             className="btn block"
             style={{ marginTop: 12 }}
@@ -541,6 +572,8 @@ function CardImages({ company }: { company: CompanyFull }) {
           <p className="mute" style={{ fontSize: 14, margin: '8px 0 0' }}>
             Pe iPhone alege „Salvează imaginea” din foaia care apare.
           </p>
+          </>
+          )}
         </Sheet>
       )}
     </>

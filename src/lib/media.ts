@@ -83,6 +83,7 @@ export async function cropToPng(
   max = 320,
 ): Promise<Blob> {
   const img = new Image()
+  img.crossOrigin = 'anonymous'
   img.src = dataUrl
   await img.decode()
   const pad = 0.015
