@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CalendarSheet } from '../components/CalendarSheet'
-import { FinancialsCard, RegistryCard, SocialLinks } from '../components/CompanyFacts'
+import { CompanyProfile, SocialLinks } from '../components/CompanyFacts'
 import { Icon } from '../components/Icon'
 import { TopBar } from '../components/Layout'
 import { CompanyLogo, Empty, errText, fmtDateTime, fmtDue, fromLocalInput, Sheet, useToast, Working } from '../components/ui'
 import { draftEmail, researchCompany, transcribeAudio } from '../lib/ai'
 import { deleteCompany, uploadLogo, useCompany, useInvalidate, useRowMutations, useUpdateCompany } from '../lib/api'
 import { fmtSeconds, imageToPng, useRecorder } from '../lib/media'
-import { mailtoUrl, mapsUrl, saveContact, shareText, telUrl, webUrl, whatsappUrl, type CalEvent } from '../lib/shortcuts'
+import { mailtoUrl, mapsUrl, saveContact, telegramUrl, telUrl, webUrl, whatsappUrl, type CalEvent } from '../lib/shortcuts'
 import { STATUS_LABEL, STATUSES, type Company, type CompanyFull, type Person } from '../lib/types'
 
 const SOURCE_LABEL = { text: 'scris', voce: 'dictat', ai: 'AI', scanare: 'carte de vizită' } as const
@@ -82,21 +82,6 @@ export function Firma() {
     }
   }
 
-  async function share() {
-    const lines = [
-      c!.name,
-      c!.category,
-      c!.city,
-      ...c!.people.map((p) => [p.full_name, p.role, p.phone, p.email].filter(Boolean).join(' · ')),
-      c!.phone,
-      c!.email,
-      c!.website,
-      c!.ai_summary,
-    ].filter(Boolean)
-    const r = await shareText(c!.name, lines.join('\n'))
-    if (r === 'copied') toast('Copiat în clipboard')
-  }
-
   return (
     <>
       <TopBar
@@ -145,6 +130,7 @@ export function Firma() {
         {c.events && <div className="label" style={{ marginBottom: 8 }}>● Cunoscut la {c.events.name}</div>}
         <div className="rigla" style={{ margin: '0 -16px 14px' }} />
 
+        {/* Rândul 1: contact direct */}
         <div className="quick">
           <a href={phone ? telUrl(phone) : undefined} className={phone ? '' : 'disabled'}>
             <Icon name="phone" /> Sună
@@ -152,6 +138,15 @@ export function Firma() {
           <a href={phone ? whatsappUrl(phone) : undefined} target="_blank" rel="noreferrer" className={phone ? '' : 'disabled'}>
             <Icon name="whatsapp" /> WhatsApp
           </a>
+          <a href={phone ? telegramUrl(phone) : undefined} target="_blank" rel="noreferrer" className={phone ? '' : 'disabled'}>
+            <Icon name="telegram" /> Telegram
+          </a>
+          <a href={mapsUrl(mapQuery)} target="_blank" rel="noreferrer">
+            <Icon name="map" /> Hartă
+          </a>
+        </div>
+        {/* Rândul 2: acțiuni */}
+        <div className="quick" style={{ marginTop: 8 }}>
           <button onClick={email_}>
             <Icon name="mail" /> Email AI
           </button>
@@ -161,15 +156,9 @@ export function Firma() {
           <button onClick={() => saveContact(c.people[0] ?? null, c)}>
             <Icon name="contact" /> Agendă
           </button>
-          <a href={mapsUrl(mapQuery)} target="_blank" rel="noreferrer">
-            <Icon name="map" /> Hartă
-          </a>
           <a href={c.website ? webUrl(c.website) : undefined} target="_blank" rel="noreferrer" className={c.website ? '' : 'disabled'}>
             <Icon name="globe" /> Site
           </a>
-          <button onClick={share}>
-            <Icon name="share" /> Trimite
-          </button>
         </div>
 
         <SocialLinks c={c} />
@@ -204,11 +193,10 @@ export function Firma() {
           </dl>
         </div>
 
-        <RegistryCard c={c} />
-        <FinancialsCard c={c} />
         <People company={c} onEdit={setPerson} />
         <Tasks company={c} onCalendar={setCalendar} />
         <Notes company={c} />
+        <CompanyProfile c={c} onResearch={research} busy={!!busy} />
 
         <div className="divider" />
         <button

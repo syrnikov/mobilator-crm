@@ -15,6 +15,8 @@ export function e164(phone: string | null | undefined): string | null {
 export const telUrl = (phone: string) => `tel:${e164(phone)}`
 export const whatsappUrl = (phone: string, text?: string) =>
   `https://wa.me/${(e164(phone) ?? '').replace('+', '')}${text ? `?text=${encodeURIComponent(text)}` : ''}`
+/** Telegram deschide chatul după număr (dacă persoana permite găsirea după telefon). */
+export const telegramUrl = (phone: string) => `https://t.me/${e164(phone)}`
 export const mailtoUrl = (to: string | null, subject = '', body = '') =>
   `mailto:${to ?? ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 export const mapsUrl = (q: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
