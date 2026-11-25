@@ -102,7 +102,7 @@ h3 { font-size: 18px; }
   background: var(--paper);
   border-bottom: 1.5px solid var(--ink);
 }
-.topbar .logo { height: 30px; display: block; }
+.topbar .logo { height: 38px; display: block; }
 .topbar .spacer { flex: 1; }
 .topbar .back { margin-left: -6px; }
 .page { flex: 1; padding: 18px 18px 40px; max-width: 640px; width: 100%; margin: 0 auto; }
@@ -173,7 +173,7 @@ h3 { font-size: 18px; }
 .icon-btn:hover { background: rgba(21, 19, 16, 0.06); }
 
 /* Acțiuni rapide (sună, WhatsApp...) */
-.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .quick a, .quick button {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   min-height: 76px; padding: 8px 4px;
@@ -378,7 +378,7 @@ h3 { font-size: 18px; }
 
 /* Login */
 .login { height: 100%; overflow-y: auto; min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 24px; max-width: 420px; margin: 0 auto; }
-.login .logo { width: 220px; margin-bottom: 8px; }
+.login .logo { width: 270px; margin-bottom: 10px; }
 
 /* ───── Financiar (bare pe riglă) ───── */
 .fin { display: flex; flex-direction: column; gap: 6px; }
@@ -452,3 +452,23 @@ h3 { font-size: 18px; }
   box-shadow: 0 0 0 9999px rgba(21, 19, 16, 0.45);
 }
 .find-socials { margin-top: 12px; }
+
+/* ───── Bara site / hartă / rețele ───── */
+.linkbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.lb {
+  width: 48px; height: 48px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%; text-decoration: none;
+  box-shadow: 0 2px 0 rgba(21, 19, 16, 0.18);
+  transition: transform 0.1s ease;
+}
+.lb:active { transform: scale(0.94); }
+.lb-web { background: var(--ink); }
+.lb-map { background: #34a853; }
+.lb-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+.lb-facebook { background: #1877f2; }
+.lb-tiktok { background: #010101; box-shadow: -2px 0 0 #25f4ee, 2px 0 0 #fe2c55, 0 2px 0 rgba(21, 19, 16, 0.18); }
+.lb-linkedin { background: #0a66c2; }
+.lb-youtube { background: #ff0000; }
+.lb-sep { width: 1.5px; height: 30px; background: var(--line); margin: 0 2px; }
+.lb-find { height: 48px; }

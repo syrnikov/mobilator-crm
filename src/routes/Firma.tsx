@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CalendarSheet } from '../components/CalendarSheet'
-import { CompanyProfile, SocialLinks } from '../components/CompanyFacts'
+import { CompanyProfile, LinkBar } from '../components/CompanyFacts'
 import { Icon } from '../components/Icon'
 import { TopBar } from '../components/Layout'
 import { CompanyLogo, Empty, errText, fmtDate, fmtDateTime, fmtDue, fromLocalInput, Sheet, useToast, Working } from '../components/ui'
@@ -133,14 +133,8 @@ export function Firma() {
             </div>
           </div>
         </div>
-        {Object.values(c.socials ?? {}).some(Boolean) ? (
-          <SocialLinks c={c} />
-        ) : (
-          <button className="btn-l sm find-socials" onClick={research} disabled={!!busy}>
-            <Icon name="instagram" size={16} /> <Icon name="facebook" size={16} /> <Icon name="tiktok" size={16} />
-            {busy ? 'Caut…' : 'Caută rețelele sociale'}
-          </button>
-        )}
+        {/* bara de prezență online: site, hartă, rețele (sau buton de căutare) */}
+        <LinkBar c={c} mapUrl={mapsUrl(mapQuery)} onFind={research} busy={!!busy} />
         <Encounters company={c} />
         <div className="rigla" style={{ margin: '12px -18px 14px' }} />
 
@@ -155,9 +149,6 @@ export function Firma() {
           <button className={phone ? '' : 'disabled'} onClick={() => phone && setMsg({ app: 'telegram', phone, name: mainPerson?.full_name, eventName })}>
             <Icon name="telegram" /> Telegram
           </button>
-          <a href={mapsUrl(mapQuery)} target="_blank" rel="noreferrer">
-            <Icon name="map" /> Hartă
-          </a>
         </div>
         {/* Rândul 2: acțiuni */}
         <div className="quick" style={{ marginTop: 8 }}>
@@ -170,9 +161,6 @@ export function Firma() {
           <button onClick={() => saveContact(c.people[0] ?? null, c)}>
             <Icon name="contact" /> Agendă
           </button>
-          <a href={c.website ? webUrl(c.website) : undefined} target="_blank" rel="noreferrer" className={c.website ? '' : 'disabled'}>
-            <Icon name="globe" /> Site
-          </a>
         </div>
 
         {busy && <Working label={busy} />}
