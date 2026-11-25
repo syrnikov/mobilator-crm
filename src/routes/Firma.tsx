@@ -6,8 +6,8 @@ import { Icon } from '../components/Icon'
 import { TopBar } from '../components/Layout'
 import { CompanyLogo, Empty, errText, fmtDateTime, fmtDue, fromLocalInput, Sheet, useToast, Working } from '../components/ui'
 import { draftEmail, researchCompany, transcribeAudio } from '../lib/ai'
-import { deleteCompany, useCompany, useInvalidate, useRowMutations, useUpdateCompany } from '../lib/api'
-import { fmtSeconds, useRecorder } from '../lib/media'
+import { deleteCompany, uploadLogo, useCompany, useInvalidate, useRowMutations, useUpdateCompany } from '../lib/api'
+import { fmtSeconds, imageToPng, useRecorder } from '../lib/media'
 import { mailtoUrl, mapsUrl, saveContact, shareText, telUrl, webUrl, whatsappUrl, type CalEvent } from '../lib/shortcuts'
 import { STATUS_LABEL, STATUSES, type Company, type CompanyFull, type Person } from '../lib/types'
 
@@ -110,7 +110,27 @@ export function Firma() {
       />
       <main className="page">
         <div className="hero">
-          <CompanyLogo name={c.name} url={c.logo_url} size="lg" />
+          <label style={{ position: 'relative', cursor: 'pointer' }} aria-label="Schimbă logo-ul">
+            <CompanyLogo name={c.name} url={c.logo_url} size="lg" />
+            <span className="logo-edit"><Icon name="camera" size={14} /></span>
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (!f) return
+                try {
+                  await uploadLogo(c.id, await imageToPng(f))
+                  invalidate(c.id)
+                  toast('Logo actualizat')
+                } catch (err) {
+                  toast(errText(err), true)
+                }
+              }}
+            />
+          </label>
           <div className="grow">
             <h1>{c.name}</h1>
             <div className="mute" style={{ fontSize: 14 }}>

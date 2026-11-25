@@ -90,7 +90,7 @@ export function Asistent() {
           )
         }
       />
-      <main className="page" style={{ paddingBottom: 'calc(var(--nav-h) + var(--safe-b) + 110px)' }}>
+      <main className="page" style={{ paddingBottom: 16 }}>
         {messages.length === 0 && (
           <div className="stack">
             <p className="mute" style={{ margin: 0 }}>

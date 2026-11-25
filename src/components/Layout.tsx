@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useCurrentEvent } from '../lib/currentEvent'
 import { useQueueCount } from '../lib/offlineQueue'
 import { CaptureSheet } from './CaptureSheet'
@@ -7,9 +7,16 @@ import { Icon } from './Icon'
 
 export function Layout() {
   const [capture, setCapture] = useState(false)
+  const screen = useRef<HTMLDivElement>(null)
+  const { pathname } = useLocation()
+  // fiecare ecran pornește de sus
+  useEffect(() => screen.current?.scrollTo(0, 0), [pathname])
   return (
     <div className="app">
-      <Outlet context={{ openCapture: () => setCapture(true) }} />
+      {/* doar zona asta derulează — documentul stă pe loc, deci bara de jos din iOS nu mai sare */}
+      <div className="screen" ref={screen}>
+        <Outlet context={{ openCapture: () => setCapture(true) }} />
+      </div>
       <nav className="bottomnav" aria-label="Navigare">
         <NavLink to="/" end>
           <Icon name="list" />
@@ -20,7 +27,7 @@ export function Layout() {
           Târguri
         </NavLink>
         <button className="fab" onClick={() => setCapture(true)} aria-label="Conexiune nouă">
-          <Icon name="mic" size={30} stroke={2.2} />
+          <Icon name="mic" size={34} stroke={2.2} />
         </button>
         <NavLink to="/asistent">
           <Icon name="sparkle" />

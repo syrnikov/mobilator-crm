@@ -9,13 +9,14 @@ const nul = (t: string) => ({ type: [t, 'null'] })
 const identifySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['found', 'country', 'registry_id', 'legal_name', 'website', 'phones', 'emails', 'address', 'city', 'category', 'products', 'socials', 'notes', 'sources'],
+  required: ['found', 'country', 'registry_id', 'legal_name', 'website', 'logo_url', 'phones', 'emails', 'address', 'city', 'category', 'products', 'socials', 'notes', 'sources'],
   properties: {
     found: { type: 'boolean', description: 'true doar dacă firma a fost identificată cu încredere' },
     country: { type: ['string', 'null'], enum: ['RO', 'MD', 'OTHER', null] },
     registry_id: { ...nul('string'), description: 'RO: CUI (doar cifre, fără RO). MD: IDNO (13 cifre).' },
     legal_name: nul('string'),
     website: nul('string'),
+    logo_url: { ...nul('string'), description: 'URL direct către o imagine a logo-ului (png/svg/jpg), dacă ai găsit unul sigur' },
     phones: { type: 'array', items: { type: 'string' }, description: 'telefoane de business, format internațional' },
     emails: { type: 'array', items: { type: 'string' } },
     address: nul('string'),
@@ -39,6 +40,7 @@ type Identify = {
   registry_id: string | null
   legal_name: string | null
   website: string | null
+  logo_url: string | null
   phones: string[]
   emails: string[]
   address: string | null
@@ -140,12 +142,14 @@ export async function researchCompany(supabase: SupabaseClient, companyId: strin
     })
   }
 
-  if (website) {
-    patch.domain = domainOf(website)
-    if (!c.logo_url) {
-      const logo = await fetchLogo(supabase, companyId, website).catch(() => null)
-      if (logo) patch.logo_url = logo
-    }
+  if (website) patch.domain = domainOf(website)
+  if (!c.logo_url) {
+    const logo = await fetchLogo(supabase, companyId, {
+      website,
+      facebook: (socials as Record<string, string>).facebook,
+      aiLogo: id.logo_url,
+    }).catch(() => null)
+    if (logo) patch.logo_url = logo
   }
 
   const { error: upErr } = await supabase.from('companies').update(patch).eq('id', companyId)
@@ -222,45 +226,94 @@ export function domainOf(url: string): string | null {
   }
 }
 
-/** Găsește logo-ul firmei (apple-touch-icon → icon mare → favicon), îl urcă în bucket-ul `logos`. */
-export async function fetchLogo(supabase: SupabaseClient, companyId: string, website: string): Promise<string | null> {
-  const base = website.startsWith('http') ? website : `https://${website}`
-  const candidates: string[] = []
+/**
+ * Găsește logo-ul firmei și îl urcă în bucket-ul `logos`. Ordinea candidaților:
+ * icon mare din <head> → <img> „logo” din pagină → logo din bundle-ul JS (site-uri SPA)
+ * → poza paginii de Facebook → URL găsit de AI → favicon-uri mici.
+ */
+export async function fetchLogo(
+  supabase: SupabaseClient,
+  companyId: string,
+  opts: { website?: string | null; facebook?: string | null; aiLogo?: string | null },
+): Promise<string | null> {
+  const strong: string[] = []
+  const weak: string[] = []
+  const base = opts.website ? (opts.website.startsWith('http') ? opts.website : `https://${opts.website}`) : null
 
-  try {
-    const html = await (await fetchT(base, {}, 7000)).text()
-    const links = [...html.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0])
-    const attr = (tag: string, name: string) => tag.match(new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, 'i'))?.[1]
-    const scored = links
-      .map((tag) => {
-        const rel = (attr(tag, 'rel') ?? '').toLowerCase()
-        const href = attr(tag, 'href')
-        if (!href || !rel.includes('icon')) return null
-        const size = parseInt((attr(tag, 'sizes') ?? '0').split('x')[0]) || 0
-        const score = (rel.includes('apple-touch') ? 1000 : 0) + size + (href.endsWith('.svg') ? -2000 : 0)
-        return { href: new URL(href, base).toString(), score }
-      })
-      .filter((x): x is { href: string; score: number } => !!x)
-      .sort((a, b) => b.score - a.score)
-    candidates.push(...scored.map((s) => s.href))
-  } catch {
-    /* site indisponibil — trecem la fallback */
+  if (base) {
+    try {
+      const html = await (await fetchT(base, {}, 8000)).text()
+      const attr = (tag: string, name: string) => tag.match(new RegExp(`\b${name}\s*=\s*["']([^"']+)["']`, 'i'))?.[1]
+      const abs = (u: string) => new URL(u, base).toString()
+
+      // 1. icon-uri din <head>
+      const icons = [...html.matchAll(/<link\b[^>]*>/gi)]
+        .map((m) => m[0])
+        .map((tag) => {
+          const rel = (attr(tag, 'rel') ?? '').toLowerCase()
+          const href = attr(tag, 'href')
+          if (!href || !rel.includes('icon')) return null
+          const size = parseInt((attr(tag, 'sizes') ?? '0').split('x')[0]) || 0
+          return { href: abs(href), big: rel.includes('apple-touch') || size >= 96, score: (rel.includes('apple-touch') ? 1000 : 0) + size }
+        })
+        .filter((x): x is { href: string; big: boolean; score: number } => !!x)
+        .sort((a, b) => b.score - a.score)
+      strong.push(...icons.filter((i) => i.big).map((i) => i.href))
+
+      // 2. <img> cu „logo” în src/class/id/alt
+      for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
+        const src = attr(m[0], 'src') ?? attr(m[0], 'data-src')
+        if (src && !src.startsWith('data:') && /logo/i.test(m[0])) strong.push(abs(src))
+      }
+
+      // 3. site SPA: căutăm un fișier „logo” în bundle-ul JS
+      if (strong.length === 0) {
+        const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+\.js)["']/gi)].map((m) => abs(m[1])).slice(0, 2)
+        for (const s of scripts) {
+          try {
+            const js = await (await fetchT(s, {}, 8000)).text()
+            const hit = js.match(/["'`](\/?[^"'`\s]*logo[^"'`\s]*\.(?:svg|png|webp|jpe?g))["'`]/i)
+            if (hit) {
+              strong.push(abs(hit[1]))
+              break
+            }
+          } catch {
+            /* ignorăm */
+          }
+        }
+      }
+
+      weak.push(...icons.filter((i) => !i.big).map((i) => i.href), abs('/favicon.ico'), abs('/favicon.png'))
+    } catch {
+      /* site indisponibil */
+    }
   }
 
-  const domain = domainOf(base)
-  if (domain) candidates.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=128`)
+  // 4. poza de profil a paginii de Facebook (de obicei chiar logo-ul)
+  const fbPage = opts.facebook?.match(/facebook\.com\/(?:pg\/)?([^/?#]+)/i)?.[1]
+  if (fbPage && !/^(profile\.php|people|groups|pages)$/i.test(fbPage)) {
+    strong.push(`https://graph.facebook.com/${encodeURIComponent(fbPage)}/picture?type=large&redirect=true`)
+  }
+  // 5. URL găsit de AI
+  if (opts.aiLogo?.startsWith('http')) strong.push(opts.aiLogo)
+  // 6. Google favicon (doar dacă există)
+  const domain = base ? domainOf(base) : null
+  if (domain) weak.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=128`)
 
-  for (const url of candidates) {
+  for (const url of [...new Set([...strong, ...weak])]) {
     try {
-      const res = await fetchT(url, {}, 7000)
-      const type = res.headers.get('content-type') ?? ''
+      const res = await fetchT(url, {}, 8000)
+      const type = (res.headers.get('content-type') ?? '').split(';')[0]
       if (!res.ok || !type.startsWith('image/')) continue
       const bytes = new Uint8Array(await res.arrayBuffer())
-      if (bytes.length < 300) continue
-      const ext = type.includes('png') ? 'png' : type.includes('svg') ? 'svg' : type.includes('jpeg') ? 'jpg' : type.includes('webp') ? 'webp' : 'ico'
+      if (bytes.length < 400) continue // pixel / favicon gol
+      const ext = type.includes('svg') ? 'svg' : type.includes('png') ? 'png' : type.includes('jpeg') ? 'jpg' : type.includes('webp') ? 'webp' : type.includes('gif') ? 'gif' : 'ico'
       const path = `${companyId}.${ext}`
       const { error } = await supabase.storage.from('logos').upload(path, bytes, { contentType: type, upsert: true })
-      if (error) continue
+      if (error) {
+        console.error('logo upload', error.message)
+        continue
+      }
       const { data } = supabase.storage.from('logos').getPublicUrl(path)
       return `${data.publicUrl}?v=${Date.now()}`
     } catch {

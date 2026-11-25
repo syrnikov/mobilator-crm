@@ -225,3 +225,13 @@ export function useTeamMutations() {
     }),
   }
 }
+
+/** Urcă un logo ales de utilizator (poză / screenshot) și îl setează pe firmă. */
+export async function uploadLogo(companyId: string, png: Blob) {
+  const path = `${companyId}.png`
+  const { error } = await supabase.storage.from('logos').upload(path, png, { contentType: 'image/png', upsert: true })
+  if (error) throw new Error(error.message)
+  const url = `${supabase.storage.from('logos').getPublicUrl(path).data.publicUrl}?v=${Date.now()}`
+  must(await supabase.from('companies').update({ logo_url: url }).eq('id', companyId))
+  return url
+}

@@ -64,3 +64,14 @@ export async function imageToDataUrl(file: File, max = 1600): Promise<string> {
 }
 
 export const fmtSeconds = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+/** Redimensionează o imagine (logo) la max `max` px, PNG transparent. */
+export async function imageToPng(file: File, max = 256): Promise<Blob> {
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bmp.width * scale)
+  canvas.height = Math.round(bmp.height * scale)
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Imagine invalidă'))), 'image/png'))
+}
