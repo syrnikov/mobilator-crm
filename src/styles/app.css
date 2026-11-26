@@ -269,19 +269,21 @@ h3 { font-size: 18px; }
 
 /* ───── Sheet (panou de jos) ───── */
 .sheet-backdrop {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 60;
   background: rgba(21, 19, 16, 0.55);
   display: flex; align-items: flex-end; justify-content: center;
   animation: fade 0.15s ease;
 }
 .sheet {
-  width: 100%; max-width: 640px; max-height: 92dvh; overflow-y: auto;
+  width: 100%; max-width: 640px; max-height: calc(100dvh - var(--safe-t) - 12px); overflow-y: auto;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   background: var(--paper);
   border-top: 3px solid var(--or);
   border-radius: 6px 6px 0 0;
   padding: 8px 16px calc(var(--safe-b) + 20px);
   animation: up 0.2s ease;
 }
+.sheet.kb { padding-bottom: 16px; }
 .sheet-handle { width: 44px; height: 4px; background: var(--line); border-radius: 2px; margin: 4px auto 12px; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 @keyframes up { from { transform: translateY(30px); opacity: 0.4; } }

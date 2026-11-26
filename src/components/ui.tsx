@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { STATUS_LABEL, type CompanyStatus } from '../lib/types'
 import { Icon, Saw } from './Icon'
 
@@ -36,9 +37,36 @@ export function Sheet({ title, onClose, children }: { title?: ReactNode; onClose
       document.body.style.overflow = ''
     }
   }, [onClose])
-  return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+  // tastatura de pe telefon micșorează zona vizibilă: panoul stă deasupra ei, nu dedesubt
+  const [kb, setKb] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const fit = () => setKb(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+    fit()
+    vv.addEventListener('resize', fit)
+    vv.addEventListener('scroll', fit)
+    return () => {
+      vv.removeEventListener('resize', fit)
+      vv.removeEventListener('scroll', fit)
+    }
+  }, [])
+  // câmpul atins se derulează în vizorul panoului
+  const onFocus = (e: { target: EventTarget }) => {
+    const el = e.target as HTMLElement
+    if (el.matches('input, textarea, select')) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300)
+  }
+  // portal în <body>: deasupra barei de jos și a containerului care derulează
+  return createPortal(
+    <div className="sheet-backdrop" onClick={onClose} style={kb ? { paddingBottom: kb } : undefined}>
+      <div
+        className={`sheet ${kb ? 'kb' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        onFocus={onFocus}
+        style={kb ? { maxHeight: `calc(100dvh - ${kb}px - 12px)` } : undefined}
+      >
         <div className="sheet-handle" />
         {title !== undefined && (
           <div className="sheet-head">
@@ -50,7 +78,8 @@ export function Sheet({ title, onClose, children }: { title?: ReactNode; onClose
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
