@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { researchCompany } from './research.ts'
+import { MODEL, outputText, responses } from './openai.ts'
 
 const STATUS = ['nou', 'de_contactat', 'in_discutii', 'colaborator', 'arhivat']
 
@@ -154,6 +155,17 @@ export const toolDefs = [
     description: 'Caută pe web informații despre o firmă din CRM și completează fișa (website, logo, rezumat, produse).',
     parameters: { type: 'object', required: ['company_id'], properties: { company_id: str() } },
   },
+  {
+    type: 'function',
+    name: 'analyze_company_media',
+    description:
+      'Analizează vizual pozele încărcate la o firmă (secțiunea „Poze & video”) și cărțile de vizită. Folosește când utilizatorul cere să „scanezi”/„analizezi” pozele unei firme. Videoclipurile nu pot fi analizate.',
+    parameters: {
+      type: 'object',
+      required: ['company_id'],
+      properties: { company_id: str(), question: str('ce anume să urmărești în poze (opțional)') },
+    },
+  },
 ]
 
 export type Action =
@@ -258,6 +270,38 @@ export async function runTool(
       const r = await researchCompany(supabase, args.company_id)
       ctx.changed.value = true
       return r
+    }
+    case 'analyze_company_media': {
+      const c = must(
+        await supabase.from('companies').select('name, media, card_images').eq('id', args.company_id).single(),
+      ) as { name: string; media: string[] | null; card_images: string[] | null }
+      const all = [...(c.media ?? []), ...(c.card_images ?? [])]
+      const images = all.filter((p) => /\.(jpe?g|png|webp|gif)$/i.test(p)).slice(0, 10)
+      const videos = all.length - all.filter((p) => /\.(jpe?g|png|webp|gif)$/i.test(p)).length
+      if (!images.length) return { info: `Firma ${c.name} nu are poze încărcate${videos ? ` (doar ${videos} video, care nu pot fi analizate)` : ''}.` }
+      const { data, error } = await supabase.storage.from('carti').createSignedUrls(images, 600)
+      if (error) throw new Error(error.message)
+      const urls = (data ?? []).map((d) => d.signedUrl).filter(Boolean) as string[]
+      const resp = await responses({
+        model: MODEL,
+        input: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text:
+                  `Poze de la firma „${c.name}”, încărcate de echipa Mobilator (producător de mobilier la comandă). ` +
+                  'Descrie pe scurt, în română, ce se vede în fiecare poză (produse, materiale, finisaje, stil, calitate, text vizibil, date de contact) ' +
+                  'și ce înseamnă pentru o posibilă colaborare. ' +
+                  (args.question ? `Urmărește în special: ${args.question}` : ''),
+              },
+              ...urls.map((u) => ({ type: 'input_image', image_url: u })),
+            ],
+          },
+        ],
+      })
+      return { images: urls.length, videos_skipped: videos, analysis: outputText(resp) }
     }
     default:
       throw new Error(`Unealtă necunoscută: ${name}`)

@@ -95,7 +95,7 @@ export function Conexiuni() {
                 Apasă pe butonul portocaliu și dictează prima conexiune.
                 <div style={{ marginTop: 14 }}>
                   <button className="btn" onClick={openCapture}>
-                    <Icon name="mic" /> Conexiune nouă
+                    <Icon name="plus" /> Conexiune nouă
                   </button>
                 </div>
               </>

@@ -30,7 +30,7 @@ export function Layout() {
           Târguri
         </NavLink>
         <button className="fab" onClick={() => setCapture(true)} aria-label="Conexiune nouă">
-          <Icon name="mic" size={34} stroke={2.2} />
+          <Icon name="plus" size={38} stroke={2.6} />
         </button>
         <NavLink to="/asistent">
           <Icon name="sparkle" />

@@ -197,6 +197,8 @@ export function socialUrl(kind: string, v: string): string {
 
 const uniq = (a: string[]) => [...new Set(a.map((s) => s.trim()).filter(Boolean))]
 
+const MDL_PER_EUR = 20
+
 const fmtMoney = (n: number | null, cur: string) =>
   n === null ? '—' : `${new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 }).format(n)} ${cur}`
 
@@ -206,8 +208,10 @@ async function summarize(
   id: Identify,
   reg: RegistryData | null,
 ): Promise<string | null> {
+  // sumele din Moldova le dăm modelului direct în EUR
+  const eur = (n: number | null, cur: string) => (cur === 'MDL' && n !== null ? fmtMoney(Math.round(n / MDL_PER_EUR), 'EUR') : fmtMoney(n, cur))
   const fin = (reg?.financials ?? []).map((f: FinancialYear) =>
-    `${f.year}: cifră de afaceri ${fmtMoney(f.revenue, f.currency)}, profit net ${fmtMoney(f.net_profit, f.currency)}${f.employees ? `, ${f.employees} angajați` : ''}`,
+    `${f.year}: cifră de afaceri ${eur(f.revenue, f.currency)}, profit net ${eur(f.net_profit, f.currency)}${f.employees ? `, ${f.employees} angajați` : ''}`,
   )
   if (!id.found && !reg) return null
   const r = await structured<{ summary: string }>({
@@ -215,7 +219,7 @@ async function summarize(
     schema: { type: 'object', additionalProperties: false, required: ['summary'], properties: { summary: { type: 'string' } } },
     instructions:
       'Scrie în română un rezumat FOARTE SCURT despre firmă pentru echipa Mobilator (producător de mobilier la comandă): ' +
-      'maxim 2-3 propoziții scurte, sub 300 de caractere în total. Spune ce face firma, cât de mare e (cifră de afaceri rotunjită, ex. „4,6 mil. MDL”, ' +
+      'maxim 2-3 propoziții scurte, sub 300 de caractere în total. Spune ce face firma, cât de mare e (cifră de afaceri rotunjită, ex. „230 mii EUR”, ' +
       'dacă există) și de ce ar fi relevantă pentru Mobilator. Fără detalii juridice (formă, dată exactă, adresă — apar deja pe fișă), fără liste, fără inventii.',
     input: JSON.stringify({
       nume: c.name,

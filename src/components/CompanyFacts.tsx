@@ -1,3 +1,4 @@
+import { toEur, useMdlRate } from '../lib/fx'
 import type { Company, FinancialYear } from '../lib/types'
 import { Icon, type IconName } from './Icon'
 import { fmtDate, useToast } from './ui'
@@ -9,7 +10,10 @@ const compact = (n: number) => new Intl.NumberFormat('ro-RO', { notation: 'compa
  * date oficiale de registru. Dacă nu există date, invită la „Cercetează cu AI”.
  */
 export function CompanyProfile({ c, onResearch, busy }: { c: Company; onResearch: () => void; busy: boolean }) {
-  const years = (c.financials ?? []).filter((f) => f.revenue !== null || f.net_profit !== null)
+  const rate = useMdlRate()
+  const raw = (c.financials ?? []).filter((f) => f.revenue !== null || f.net_profit !== null)
+  const fromMdl = raw.some((f) => f.currency === 'MDL')
+  const years = toEur(raw, rate)
   const hasRegistry = !!(c.registry_id || c.legal_name || c.founded_on)
 
   return (
@@ -34,6 +38,9 @@ export function CompanyProfile({ c, onResearch, busy }: { c: Company; onResearch
           <KeyFigures c={c} years={years} />
           {years.length > 0 && <FinanceChart years={years} />}
           {years.length > 0 && <FinanceTable years={years} />}
+          {fromMdl && (
+            <div className="label">convertit din MDL · 1 EUR = {rate.toFixed(2)} MDL</div>
+          )}
           <RegistryDetails c={c} />
         </div>
       )}

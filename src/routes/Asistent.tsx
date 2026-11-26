@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { CalendarSheet } from '../components/CalendarSheet'
 import { Icon, Saw } from '../components/Icon'
 import { TopBar } from '../components/Layout'
@@ -33,6 +33,9 @@ export function Asistent() {
   const toast = useToast()
   const invalidate = useInvalidate()
   const end = useRef<HTMLDivElement>(null)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const prefill = (location.state as { prompt?: string } | null)?.prompt
 
   useEffect(() => {
     localStorage.setItem(KEY, JSON.stringify(messages.slice(-40)))
@@ -56,6 +59,14 @@ export function Asistent() {
       setThinking(false)
     }
   }
+
+  // venit din fișa unei firme cu o cerere gata scrisă → o trimitem o singură dată
+  useEffect(() => {
+    if (!prefill) return
+    navigate('.', { replace: true, state: null })
+    send(prefill)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill])
 
   async function mic() {
     if (!rec.recording) {

@@ -79,6 +79,7 @@ export interface Company {
   registry_url: string | null
   enriched_at: string | null
   card_images: string[]
+  media: string[]
 }
 
 export interface FinancialYear {
@@ -91,7 +92,7 @@ export interface FinancialYear {
   current_assets?: number | null
   equity?: number | null
   employees: number | null
-  currency: 'RON' | 'MDL'
+  currency: 'RON' | 'MDL' | 'EUR'
 }
 
 export interface Encounter {

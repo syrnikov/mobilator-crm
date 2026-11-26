@@ -6,8 +6,8 @@ import { Icon } from '../components/Icon'
 import { TopBar } from '../components/Layout'
 import { CompanyLogo, Empty, errText, fmtDate, fmtDateTime, fmtDue, fromLocalInput, Sheet, useToast, Working } from '../components/ui'
 import { draftEmail, researchCompany, transcribeAudio } from '../lib/ai'
-import { cardImageUrls, deleteCompany, uploadLogo, useCompany, useEvents, useInvalidate, useRowMutations, useUpdateCompany } from '../lib/api'
-import { fmtSeconds, imageToPng, useRecorder } from '../lib/media'
+import { cardImageUrls, deleteCompany, deleteCompanyMedia, isVideo, uploadCompanyMedia, uploadLogo, useCompany, useEvents, useInvalidate, useRowMutations, useUpdateCompany } from '../lib/api'
+import { fmtSeconds, imageToDataUrl, imageToPng, useRecorder } from '../lib/media'
 import { mailtoUrl, mapsUrl, saveContact, saveImage, telUrl, webUrl, type CalEvent } from '../lib/shortcuts'
 import { MessageSheet, type MessageTarget } from '../components/MessageSheet'
 import { LogoCrop } from '../components/LogoCrop'
@@ -196,6 +196,7 @@ export function Firma() {
 
         <People company={c} onEdit={setPerson} onMessage={(app, p) => setMsg({ app, phone: p.phone!, name: p.full_name, eventName })} />
         <CardImages company={c} />
+        <CompanyMedia company={c} />
         <Tasks company={c} onCalendar={setCalendar} />
         <Notes company={c} />
         <CompanyProfile c={c} onResearch={research} busy={!!busy} />
@@ -506,6 +507,128 @@ function Encounters({ company }: { company: CompanyFull }) {
               <Icon name="pin" /> Salvează întâlnirea
             </button>
           </div>
+        </Sheet>
+      )}
+    </>
+  )
+}
+
+// ───────────── Poze & video ─────────────
+function CompanyMedia({ company }: { company: CompanyFull }) {
+  const media = company.media ?? []
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const [open, setOpen] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  const invalidate = useInvalidate()
+  const navigate = useNavigate()
+  const key = media.join('|')
+  useEffect(() => {
+    cardImageUrls(media).then(setUrls).catch(() => setUrls({}))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  async function add(list: FileList | null) {
+    if (!list?.length) return
+    setBusy(true)
+    try {
+      const files: { blob: Blob; ext: string; type: string }[] = []
+      for (const f of Array.from(list)) {
+        if (f.type.startsWith('video/')) {
+          if (f.size > 50 * 1024 * 1024) {
+            toast(`${f.name}: video prea mare (max 50 MB)`, true)
+            continue
+          }
+          const ext = (f.name.split('.').pop() || 'mp4').toLowerCase()
+          files.push({ blob: f, ext, type: f.type })
+        } else {
+          // poze: redimensionate la JPEG (merge și din HEIC pe iPhone), ca AI-ul să le poată citi
+          const blob = await (await fetch(await imageToDataUrl(f, 2000))).blob()
+          files.push({ blob, ext: 'jpg', type: 'image/jpeg' })
+        }
+      }
+      await uploadCompanyMedia(company.id, files)
+      invalidate(company.id)
+      if (files.length) toast(`${files.length} ${files.length === 1 ? 'fișier adăugat' : 'fișiere adăugate'}`)
+    } catch (e) {
+      toast(errText(e), true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(path: string) {
+    try {
+      await deleteCompanyMedia(company.id, path)
+      setOpen(null)
+      invalidate(company.id)
+    } catch (e) {
+      toast(errText(e), true)
+    }
+  }
+
+  const photos = media.filter((p) => !isVideo(p)).length
+  return (
+    <>
+      <div className="section-title">
+        <h2>Poze & video</h2>
+        <span className="label">{media.length || ''}</span>
+      </div>
+      {media.length > 0 && (
+        <div className="media-grid">
+          {media.map((p) =>
+            urls[p] ? (
+              <button key={p} className="media-tile" onClick={() => setOpen(p)}>
+                {isVideo(p) ? (
+                  <>
+                    <video src={`${urls[p]}#t=0.1`} muted playsInline preload="metadata" />
+                    <span className="media-play">▶</span>
+                  </>
+                ) : (
+                  <img src={urls[p]} alt="" loading="lazy" />
+                )}
+              </button>
+            ) : (
+              <div key={p} className="media-tile skeleton" />
+            ),
+          )}
+        </div>
+      )}
+      <div className="row" style={{ gap: 8, marginTop: media.length ? 10 : 0 }}>
+        <label className={`btn-l grow ${busy ? 'disabled' : ''}`} style={{ justifyContent: 'center' }}>
+          <Icon name="plus" /> {busy ? 'Se încarcă…' : 'Adaugă poze / video'}
+          <input type="file" accept="image/*,video/*" multiple hidden disabled={busy} onChange={(e) => { add(e.target.files); e.target.value = '' }} />
+        </label>
+        {photos > 0 && (
+          <button
+            className="btn-l"
+            onClick={() =>
+              navigate('/asistent', {
+                state: { prompt: `Analizează pozele firmei ${company.name} (id ${company.id}) și spune-mi ce vezi: produse, materiale, stil, calitate, idei de colaborare cu Mobilator.` },
+              })
+            }
+          >
+            <Icon name="sparkle" /> Analizează cu AI
+          </button>
+        )}
+      </div>
+      {open && urls[open] && (
+        <Sheet title={isVideo(open) ? 'Video' : 'Poză'} onClose={() => setOpen(null)}>
+          {isVideo(open) ? (
+            <video src={urls[open]} controls playsInline autoPlay style={{ width: '100%', border: '1.5px solid var(--ink)', borderRadius: 2 }} />
+          ) : (
+            <img src={urls[open]} alt="" style={{ width: '100%', border: '1.5px solid var(--ink)', borderRadius: 2 }} />
+          )}
+          <button
+            className="btn block"
+            style={{ marginTop: 12 }}
+            onClick={() => saveImage(urls[open], open.split('/').pop() || 'media').catch((e) => toast(errText(e), true))}
+          >
+            <Icon name="download" /> Salvează pe telefon
+          </button>
+          <button className="btn-l block" style={{ marginTop: 10, width: '100%' }} onClick={() => remove(open)}>
+            <Icon name="trash" /> Șterge
+          </button>
         </Sheet>
       )}
     </>

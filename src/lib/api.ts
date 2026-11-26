@@ -186,6 +186,28 @@ export async function cardImageUrls(paths: string[]): Promise<Record<string, str
   return Object.fromEntries((data ?? []).filter((d) => d.signedUrl).map((d) => [d.path!, d.signedUrl as string]))
 }
 
+// ───────────── Poze & video ale firmei (același bucket privat) ─────────────
+export async function uploadCompanyMedia(companyId: string, files: { blob: Blob; ext: string; type: string }[]) {
+  const paths: string[] = []
+  for (const f of files) {
+    const path = `${companyId}/media/${Date.now()}-${paths.length}.${f.ext}`
+    const { error } = await supabase.storage.from('carti').upload(path, f.blob, { contentType: f.type })
+    if (error) throw new Error(error.message)
+    paths.push(path)
+  }
+  if (!paths.length) return
+  const { data } = await supabase.from('companies').select('media').eq('id', companyId).single()
+  must(await supabase.from('companies').update({ media: [...(data?.media ?? []), ...paths] }).eq('id', companyId))
+}
+
+export async function deleteCompanyMedia(companyId: string, path: string) {
+  const { data } = await supabase.from('companies').select('media').eq('id', companyId).single()
+  must(await supabase.from('companies').update({ media: (data?.media ?? []).filter((p: string) => p !== path) }).eq('id', companyId))
+  await supabase.storage.from('carti').remove([path])
+}
+
+export const isVideo = (path: string) => /\.(mp4|mov|webm|m4v|3gp)$/i.test(path)
+
 export async function companyHasLogo(companyId: string) {
   const { data } = await supabase.from('companies').select('logo_url').eq('id', companyId).single()
   return !!data?.logo_url
